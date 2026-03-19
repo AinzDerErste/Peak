@@ -12,7 +12,7 @@ public class UpdateService
     private string? _downloadedInstallerPath;
 
     // TODO: Set this to the actual GitHub repo when created
-    public const string GitHubOwner = "OWNER";
+    public const string GitHubOwner = "AinzDerErste";
     public const string GitHubRepo = "Peak";
 
     public event Action? UpdateStatusChanged;
