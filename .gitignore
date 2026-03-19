@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+.vs/
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## Build output
+publish/
+installer/output/
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Claude
+.claude/

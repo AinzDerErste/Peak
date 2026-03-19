@@ -1,0 +1,9 @@
+<UserControl x:Class="Notch.App.Views.Widgets.ClockWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="{StaticResource InterFont}">
+    <StackPanel VerticalAlignment="Center">
+        <TextBlock Text="{Binding CurrentTime}" Foreground="White" FontSize="24" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding CurrentDate}" Foreground="#88FFFFFF" FontSize="11" Margin="1,3,0,0" />
+    </StackPanel>
+</UserControl>
