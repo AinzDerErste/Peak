@@ -22,7 +22,7 @@ A macOS/iOS-style Dynamic Island for Windows, built as a hobby project.
 
 ## AI Disclaimer
 
-This is a personal hobby project. AI (Claude) was used to assist with smaller implementation tasks during development.
+This is a personal hobby project. AI (Claude) was used to assist with smaller implementation tasks during development since WPF can be a bit**.
 
 ## License
 
