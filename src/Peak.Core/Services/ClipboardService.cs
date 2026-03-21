@@ -186,7 +186,8 @@ public class ClipboardService : IDisposable
             try { File.Delete(e.FilePath!); } catch { }
         }
         _history.Clear();
-        _lastTextHash = null;
+        // Keep hashes so current clipboard content doesn't immediately re-appear
+        // _lastTextHash and _lastImageHash intentionally NOT cleared
         Save();
         HistoryChanged?.Invoke();
     }
