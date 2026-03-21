@@ -4,36 +4,43 @@
              xmlns:local="clr-namespace:Peak.App.Views.Widgets"
              FontFamily="{StaticResource InterFont}">
     <Grid>
-        <!-- Header + Clear button -->
-        <DockPanel Margin="0,0,0,2">
-            <TextBlock Text="Clipboard" Foreground="#88FFFFFF" FontSize="10" FontWeight="SemiBold"
-                       DockPanel.Dock="Left" VerticalAlignment="Center" Margin="2,0,0,0" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <DockPanel Grid.Row="0" Margin="2,0,4,4">
+            <TextBlock Text="📋 Clipboard" Foreground="#88FFFFFF" FontSize="10" FontWeight="SemiBold"
+                       DockPanel.Dock="Left" VerticalAlignment="Center" />
             <TextBlock Text="Clear" Foreground="#55FFFFFF" FontSize="9" Cursor="Hand"
-                       DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                       DockPanel.Dock="Right" VerticalAlignment="Center"
                        MouseDown="OnClearAllClick" />
             <Rectangle />
         </DockPanel>
 
         <!-- Scrollable list -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,16,0,0"
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding ClipboardHistory}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Background="#15FFFFFF" CornerRadius="4" Padding="6,3" Margin="0,0,0,2"
+                        <Border Background="#15FFFFFF" CornerRadius="4" Padding="6,4" Margin="0,0,0,2"
                                 Cursor="Hand" MouseDown="OnEntryClick" MouseEnter="OnEntryHover" MouseLeave="OnEntryLeave"
                                 Tag="{Binding}">
                             <DockPanel>
-                                <!-- Type icon -->
-                                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="10"
-                                           Text="{Binding ContentType, Converter={x:Static local:ClipboardWidget.TypeIconConverter}}" />
                                 <!-- Timestamp -->
                                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="8"
-                                           Foreground="#44FFFFFF" Margin="4,0,0,0"
+                                           Foreground="#44FFFFFF" Margin="6,0,0,0"
                                            Text="{Binding CopiedAt, StringFormat='{}{0:HH:mm}'}" />
-                                <!-- Preview text -->
-                                <TextBlock Text="{Binding DisplayText}" Foreground="White" FontSize="10"
-                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <!-- Type icon + Preview -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock FontSize="9" Margin="0,0,4,0" VerticalAlignment="Center"
+                                               Text="{Binding ContentType, Converter={x:Static local:ClipboardWidget.TypeIconConverter}}" />
+                                    <TextBlock Text="{Binding DisplayText}" Foreground="White" FontSize="10"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               MaxWidth="160" />
+                                </StackPanel>
                             </DockPanel>
                         </Border>
                     </DataTemplate>
@@ -42,7 +49,7 @@
         </ScrollViewer>
 
         <!-- Empty state -->
-        <TextBlock x:Name="EmptyHint" Text="No clipboard history" Foreground="#44FFFFFF" FontSize="11"
+        <TextBlock Grid.Row="1" Text="No clipboard history" Foreground="#44FFFFFF" FontSize="11"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    Visibility="{Binding ClipboardHistory.Count, Converter={x:Static local:ClipboardWidget.EmptyConverter}}" />
     </Grid>

@@ -661,6 +661,25 @@ public partial class IslandViewModel : ObservableObject
             try { return System.Windows.Clipboard.ContainsImage(); }
             catch { return false; }
         };
+        _clipboardService.GetClipboardImageHash = () =>
+        {
+            try
+            {
+                var img = System.Windows.Clipboard.GetImage();
+                if (img == null) return null;
+                // Hash: dimensions + sampled pixel bytes for uniqueness
+                int stride = img.PixelWidth * ((img.Format.BitsPerPixel + 7) / 8);
+                var pixels = new byte[stride * img.PixelHeight];
+                img.CopyPixels(pixels, stride, 0);
+                // Sample ~64 bytes spread across the image
+                long hash = img.PixelWidth * 31L + img.PixelHeight;
+                int step = Math.Max(1, pixels.Length / 64);
+                for (int i = 0; i < pixels.Length; i += step)
+                    hash = hash * 31 + pixels[i];
+                return hash.ToString();
+            }
+            catch { return null; }
+        };
         _clipboardService.SaveClipboardImage = dir =>
         {
             try

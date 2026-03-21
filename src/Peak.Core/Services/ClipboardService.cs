@@ -9,6 +9,7 @@ public class ClipboardService : IDisposable
     private readonly string _imagesDir;
     private readonly List<ClipboardEntry> _history = new();
     private string? _lastTextHash;
+    private string? _lastImageHash;
     private bool _disposed;
 
     public int MaxEntries { get; set; } = 25;
@@ -29,6 +30,11 @@ public class ClipboardService : IDisposable
     /// Delegate set by the UI layer to save clipboard image to a file and return the path.
     /// </summary>
     public Func<string, string?>? SaveClipboardImage { get; set; }
+
+    /// <summary>
+    /// Delegate set by the UI layer to compute a hash of the current clipboard image.
+    /// </summary>
+    public Func<string?>? GetClipboardImageHash { get; set; }
 
     /// <summary>
     /// Delegate set by the UI layer to check if clipboard has file drop list.
@@ -80,22 +86,28 @@ public class ClipboardService : IDisposable
                 }
             }
 
-            // Check image
+            // Check image — hash first to avoid saving duplicates
             if (ClipboardHasImage?.Invoke() == true)
             {
-                var imgPath = SaveClipboardImage?.Invoke(_imagesDir);
-                if (imgPath != null)
+                var imgHash = GetClipboardImageHash?.Invoke();
+                if (imgHash != null && imgHash != _lastImageHash)
                 {
-                    // Avoid re-adding the same image
-                    if (_history.Count > 0 && _history[0].FilePath == imgPath) return;
-
-                    AddEntry(new ClipboardEntry
+                    _lastImageHash = imgHash;
+                    var imgPath = SaveClipboardImage?.Invoke(_imagesDir);
+                    if (imgPath != null)
                     {
-                        ContentType = "image",
-                        FilePath = imgPath,
-                        DisplayText = "Image"
-                    });
-                    return;
+                        AddEntry(new ClipboardEntry
+                        {
+                            ContentType = "image",
+                            FilePath = imgPath,
+                            DisplayText = "Screenshot"
+                        });
+                        return;
+                    }
+                }
+                else
+                {
+                    return; // Same image still on clipboard, skip file checks
                 }
             }
 
