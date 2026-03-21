@@ -626,7 +626,7 @@
                         </Border>
 
                         <!-- ═══ ABOUT ═══ -->
-                        <Border Style="{StaticResource SectionCard}" Margin="24,18,24,0">
+                        <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Text="ABOUT" Style="{StaticResource SectionHeader}" />
 
