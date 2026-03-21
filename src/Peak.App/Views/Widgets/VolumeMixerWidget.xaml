@@ -15,10 +15,12 @@
         </Grid>
 
         <!-- Session list -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden"
                       HorizontalScrollBarVisibility="Disabled"
+                      CanContentScroll="True"
+                      PreviewMouseWheel="OnListScroll"
                       Padding="0" Margin="0">
-            <ItemsControl x:Name="SessionList">
+            <ItemsControl x:Name="SessionList" ItemsSource="{Binding AudioSessions}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Margin="0,2,0,2" Height="22">
@@ -57,9 +59,10 @@
                                 <ProgressBar Value="{Binding Volume}" Maximum="1"
                                              Style="{StaticResource ThinProgress}"
                                              Foreground="{DynamicResource AccentBrush}"
-                                             Width="Auto" Height="3"
+                                             Width="Auto" Height="6"
                                              Cursor="Hand"
                                              MouseDown="OnVolumeBarClick"
+                                             MouseWheel="OnVolumeBarScroll"
                                              Tag="{Binding Id}" />
                             </StackPanel>
 

@@ -815,11 +815,18 @@ public partial class IslandViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ToggleMute(string sessionId) => _volumeMixerService.ToggleMute(sessionId);
+    private void ToggleMute(string sessionId)
+    {
+        _volumeMixerService.ToggleMute(sessionId);
+        _volumeMixerService.Refresh();
+    }
 
     [RelayCommand]
-    private void SetSessionVolume((string Id, float Volume) args) =>
+    private void SetSessionVolume((string Id, float Volume) args)
+    {
         _volumeMixerService.SetVolume(args.Id, args.Volume);
+        _volumeMixerService.Refresh();
+    }
 
     public void Cleanup()
     {
