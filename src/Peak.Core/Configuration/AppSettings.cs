@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Peak.Core.Configuration;
 
 public enum IslandBehavior
@@ -91,4 +93,11 @@ public class AppSettings
     // Audio visualizer
     public string AudioDeviceId { get; set; } = "";
     public double VisualizerSensitivity { get; set; } = 50; // 0-100, maps to amplification factor
+
+    // Plugin settings (key = plugin ID)
+    public Dictionary<string, JsonElement> PluginSettings { get; set; } = new();
+
+    // String-based slot IDs for plugin widget support
+    // When non-empty, takes precedence over WidgetSlots (enum-based)
+    public string[] WidgetSlotIds { get; set; } = [];
 }

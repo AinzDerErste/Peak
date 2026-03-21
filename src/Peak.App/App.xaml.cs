@@ -6,7 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Peak.App.ViewModels;
 using Peak.App.Views;
+using Peak.App.Views.Widgets;
 using Peak.Core.Configuration;
+using Peak.Core.Plugins;
 using Peak.Core.Services;
 
 namespace Peak.App;
@@ -17,6 +19,7 @@ public partial class App : Application
     private IHost? _host;
     private TaskbarIcon? _trayIcon;
     private IslandWindow? _islandWindow;
+    private PluginLoader? _pluginLoader;
 
     public IServiceProvider Services => _host!.Services;
 
@@ -50,6 +53,7 @@ public partial class App : Application
                     services.AddSingleton<TimerService>();
                     services.AddSingleton<ClipboardService>();
                     services.AddSingleton<NotesService>();
+                    services.AddSingleton<WidgetRegistry>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();
                     services.AddSingleton<UpdateService>();
@@ -64,6 +68,11 @@ public partial class App : Application
 
             // Apply theme colors from settings
             UpdateThemeColors(settingsManager.Settings.IslandBackground, settingsManager.Settings.AccentColor);
+
+            // Register built-in widgets and load plugins
+            var registry = _host.Services.GetRequiredService<WidgetRegistry>();
+            RegisterBuiltInWidgets(registry);
+            LoadPlugins(registry, settingsManager, _host.Services);
 
             // Setup tray icon
             SetupTrayIcon();
@@ -161,11 +170,47 @@ public partial class App : Application
             _islandWindow.Show();
     }
 
+    private static void RegisterBuiltInWidgets(WidgetRegistry registry)
+    {
+        registry.Register("none", "None", _ => null);
+        registry.Register("clock", "Clock", dc => new ClockWidget { DataContext = dc });
+        registry.Register("weather", "Weather", dc => new WeatherWidget { DataContext = dc });
+        registry.Register("media", "Media", dc => new MediaWidget { DataContext = dc });
+        registry.Register("systemmonitor", "System Monitor", dc => new SystemMonitorWidget { DataContext = dc });
+        registry.Register("calendar", "Calendar", dc => new CalendarWidget { DataContext = dc });
+        registry.Register("timer", "Timer", dc => new TimerWidget { DataContext = dc });
+        registry.Register("network", "Network", dc => new NetworkWidget { DataContext = dc });
+        registry.Register("quickaccess", "Quick Access", dc => new QuickAccessWidget { DataContext = dc });
+        registry.Register("clipboard", "Clipboard", dc => new ClipboardWidget { DataContext = dc });
+        registry.Register("quicknotes", "Quick Notes", dc => new QuickNotesWidget { DataContext = dc });
+    }
+
+    private void LoadPlugins(WidgetRegistry registry, SettingsManager settingsManager, IServiceProvider services)
+    {
+        var pluginsDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Peak", "plugins");
+        _pluginLoader = new PluginLoader(pluginsDir);
+
+        try
+        {
+            var plugins = _pluginLoader.LoadAll(services, settingsManager.Settings.PluginSettings);
+            foreach (var plugin in plugins)
+            {
+                registry.Register(plugin.Id, plugin.Name, dc => plugin.CreateView(dc), isBuiltIn: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Plugin loading failed: {ex.Message}");
+        }
+    }
+
     private void ExitApplication()
     {
         var viewModel = _host?.Services.GetRequiredService<IslandViewModel>();
         viewModel?.Cleanup();
 
+        _pluginLoader?.Dispose();
         _trayIcon?.Dispose();
         _host?.Dispose();
         SingleInstanceMutex.ReleaseMutex();
