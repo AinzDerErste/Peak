@@ -1,0 +1,88 @@
+; Peak - Dynamic Island for Windows
+; Inno Setup Script
+
+#define MyAppName "Peak"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Peak"
+#define MyAppExeName "Peak.App.exe"
+#define MyAppURL "https://github.com/AinzDerErste/Peak"
+
+#define PublishDir "..\src\Peak.App\bin\Release\net8.0-windows10.0.22621.0\publish"
+#define IconFile "..\src\Peak.App\Assets\app-icon.ico"
+
+[Setup]
+AppId={{B8F3E2A1-7C4D-4E5F-9A6B-1D2E3F4A5B6C}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+DefaultDirName={localappdata}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+OutputDir=output
+OutputBaseFilename=PeakSetup
+SetupIconFile={#IconFile}
+UninstallDisplayIcon={app}\{#MyAppExeName}
+Compression=lzma2/max
+SolidCompression=yes
+PrivilegesRequired=lowest
+WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "autostart"; Description: "Start Peak with Windows"; GroupDescription: "Additional options:"
+
+[Files]
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"" --minimized"; Flags: uninsdeletevalue; Tasks: autostart
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillPeak"
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+function IsDotNet8Installed(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec('dotnet', '--list-runtimes', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  if Result then
+  begin
+    // Check if .NET 8 desktop runtime is available
+    Result := Exec('cmd', '/c dotnet --list-runtimes | findstr "Microsoft.WindowsDesktop.App 8."', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  end;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if not IsDotNet8Installed() then
+  begin
+    if MsgBox('Peak requires .NET 8 Desktop Runtime which was not found on your system.' + #13#10 + #13#10 +
+              'Please download and install it from:' + #13#10 +
+              'https://dotnet.microsoft.com/download/dotnet/8.0' + #13#10 + #13#10 +
+              'Do you want to continue the installation anyway?',
+              mbConfirmation, MB_YESNO) = IDNO then
+    begin
+      Result := False;
+    end;
+  end;
+end;

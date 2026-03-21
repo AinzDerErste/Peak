@@ -1,0 +1,18 @@
+<UserControl x:Class="Peak.App.Views.Widgets.WeatherWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="{StaticResource InterFont}">
+    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Path Data="{Binding WeatherIconGeometry}" Fill="White" Stretch="Uniform"
+                  Width="20" Height="20" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding WeatherTemp}" Foreground="White" FontSize="24"
+                       FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0" />
+        </StackPanel>
+        <TextBlock Foreground="#88FFFFFF" FontSize="11" HorizontalAlignment="Right" Margin="0,3,0,0">
+            <Run Text="{Binding WeatherDescription, Mode=OneWay}" />
+            <Run Text=" · " Foreground="#55FFFFFF" />
+            <Run Text="{Binding WeatherCity, Mode=OneWay}" />
+        </TextBlock>
+    </StackPanel>
+</UserControl>
