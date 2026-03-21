@@ -238,6 +238,8 @@ public partial class IslandWindow : Window
             WidgetType.Timer => new TimerWidget { DataContext = _viewModel },
             WidgetType.Network => new NetworkWidget { DataContext = _viewModel },
             WidgetType.QuickAccess => new QuickAccessWidget { DataContext = _viewModel },
+            WidgetType.Clipboard => new ClipboardWidget { DataContext = _viewModel },
+            WidgetType.QuickNotes => new QuickNotesWidget { DataContext = _viewModel },
             _ => null
         };
 

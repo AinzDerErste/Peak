@@ -27,6 +27,8 @@
         <DataTemplate x:Key="TimerTemplate"><w:TimerWidget /></DataTemplate>
         <DataTemplate x:Key="NetworkTemplate"><w:NetworkWidget /></DataTemplate>
         <DataTemplate x:Key="QuickAccessTemplate"><w:QuickAccessWidget /></DataTemplate>
+        <DataTemplate x:Key="ClipboardTemplate"><w:ClipboardWidget /></DataTemplate>
+        <DataTemplate x:Key="QuickNotesTemplate"><w:QuickNotesWidget /></DataTemplate>
         <DataTemplate x:Key="NoneTemplate"><Border /></DataTemplate>
 
         <!-- Dark Toggle Button for ComboBox -->

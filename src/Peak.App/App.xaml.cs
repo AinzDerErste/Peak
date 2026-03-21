@@ -48,6 +48,8 @@ public partial class App : Application
                     services.AddSingleton<WeatherService>();
                     services.AddSingleton<CalendarService>();
                     services.AddSingleton<TimerService>();
+                    services.AddSingleton<ClipboardService>();
+                    services.AddSingleton<NotesService>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();
                     services.AddSingleton<UpdateService>();

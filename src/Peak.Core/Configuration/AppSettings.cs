@@ -16,7 +16,9 @@ public enum WidgetType
     Calendar,
     Timer,
     Network,
-    QuickAccess
+    QuickAccess,
+    Clipboard,
+    QuickNotes
 }
 
 public enum RowMode

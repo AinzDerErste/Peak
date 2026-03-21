@@ -30,6 +30,8 @@ public partial class IslandViewModel : ObservableObject
     private readonly CalendarService _calendarService;
     private readonly TimerService _timerService;
     private readonly UpdateService _updateService;
+    private readonly ClipboardService _clipboardService;
+    private readonly NotesService _notesService;
     private readonly SettingsManager _settingsManager;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _autoCollapseTimer;
@@ -119,6 +121,13 @@ public partial class IslandViewModel : ObservableObject
     // Quick Access
     public ObservableCollection<QuickAccessItem> QuickAccessItems { get; } = new();
 
+    // Clipboard History
+    public ObservableCollection<ClipboardEntry> ClipboardHistory { get; } = new();
+
+    // Quick Notes
+    public ObservableCollection<NoteItem> Notes { get; } = new();
+    [ObservableProperty] private NoteItem? _selectedNote;
+
     // Collapsed-state slots (Left, Center, Right)
     [ObservableProperty] private CollapsedWidget _collapsedLeft = CollapsedWidget.WeatherIcon;
     [ObservableProperty] private CollapsedWidget _collapsedCenter = CollapsedWidget.Clock;
@@ -145,6 +154,8 @@ public partial class IslandViewModel : ObservableObject
         CalendarService calendarService,
         TimerService timerService,
         UpdateService updateService,
+        ClipboardService clipboardService,
+        NotesService notesService,
         SettingsManager settingsManager)
     {
         _mediaService = mediaService;
@@ -155,6 +166,8 @@ public partial class IslandViewModel : ObservableObject
         _calendarService = calendarService;
         _timerService = timerService;
         _updateService = updateService;
+        _clipboardService = clipboardService;
+        _notesService = notesService;
         _settingsManager = settingsManager;
         _dispatcher = Dispatcher.CurrentDispatcher;
 
@@ -219,6 +232,8 @@ public partial class IslandViewModel : ObservableObject
         _notificationService.StartPolling();
         await RefreshWeatherAsync();
         await RefreshCalendarAsync();
+        InitializeClipboard();
+        InitializeNotes();
     }
 
     private void LoadSlotLayout()
@@ -629,15 +644,136 @@ public partial class IslandViewModel : ObservableObject
         Application.Current?.Shutdown();
     }
 
+    // ─── Clipboard History ─────────────────────────────────────
+
+    private DispatcherTimer? _clipboardPollTimer;
+
+    private void InitializeClipboard()
+    {
+        // Wire up STA-thread clipboard delegates
+        _clipboardService.GetClipboardText = () =>
+        {
+            try { return System.Windows.Clipboard.ContainsText() ? System.Windows.Clipboard.GetText() : null; }
+            catch { return null; }
+        };
+        _clipboardService.ClipboardHasImage = () =>
+        {
+            try { return System.Windows.Clipboard.ContainsImage(); }
+            catch { return false; }
+        };
+        _clipboardService.SaveClipboardImage = dir =>
+        {
+            try
+            {
+                var img = System.Windows.Clipboard.GetImage();
+                if (img == null) return null;
+                var path = System.IO.Path.Combine(dir, $"{Guid.NewGuid()}.png");
+                using var fs = new System.IO.FileStream(path, System.IO.FileMode.Create);
+                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(img));
+                encoder.Save(fs);
+                return path;
+            }
+            catch { return null; }
+        };
+        _clipboardService.GetClipboardFiles = () =>
+        {
+            try
+            {
+                return System.Windows.Clipboard.ContainsFileDropList()
+                    ? System.Windows.Clipboard.GetFileDropList().Cast<string>().ToArray()
+                    : null;
+            }
+            catch { return null; }
+        };
+        _clipboardService.SetClipboardText = text =>
+        {
+            try { System.Windows.Clipboard.SetText(text); } catch { }
+        };
+
+        // Load existing history
+        RefreshClipboardHistory();
+
+        // Subscribe to changes
+        _clipboardService.HistoryChanged += () => _dispatcher.Invoke(RefreshClipboardHistory);
+
+        // Poll clipboard every 500ms on UI thread
+        _clipboardPollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _clipboardPollTimer.Tick += (_, _) => _clipboardService.Poll();
+        _clipboardPollTimer.Start();
+    }
+
+    private void RefreshClipboardHistory()
+    {
+        ClipboardHistory.Clear();
+        foreach (var entry in _clipboardService.GetHistory())
+            ClipboardHistory.Add(entry);
+    }
+
+    [RelayCommand]
+    private void CopyClipboardEntry(ClipboardEntry entry) => _clipboardService.CopyToClipboard(entry);
+
+    [RelayCommand]
+    private void RemoveClipboardEntry(ClipboardEntry entry) => _clipboardService.Remove(entry);
+
+    [RelayCommand]
+    private void ClearClipboardHistory() => _clipboardService.ClearAll();
+
+    // ─── Quick Notes ────────────────────────────────────────────
+
+    private void InitializeNotes()
+    {
+        RefreshNotes();
+        _notesService.NotesChanged += () => _dispatcher.Invoke(RefreshNotes);
+    }
+
+    private void RefreshNotes()
+    {
+        Notes.Clear();
+        foreach (var note in _notesService.GetNotes())
+            Notes.Add(note);
+    }
+
+    [RelayCommand]
+    private void CreateNote()
+    {
+        var note = _notesService.CreateNote();
+        SelectedNote = note;
+    }
+
+    [RelayCommand]
+    private void DeleteNote(NoteItem note)
+    {
+        _notesService.DeleteNote(note.Id);
+        if (SelectedNote?.Id == note.Id)
+            SelectedNote = null;
+    }
+
+    [RelayCommand]
+    private void SelectNote(NoteItem note)
+    {
+        SelectedNote = note;
+    }
+
+    [RelayCommand]
+    private void SaveNote()
+    {
+        if (SelectedNote != null)
+            _notesService.UpdateNote(SelectedNote);
+    }
+
     public void Cleanup()
     {
         _clockTimer.Stop();
         _autoCollapseTimer.Stop();
         _weatherTimer.Stop();
+        _clipboardPollTimer?.Stop();
         _mediaService.Dispose();
         _systemMonitorService.Dispose();
         _networkMonitorService.Dispose();
         _notificationService.Dispose();
+        _clipboardService.Dispose();
+        _notesService.Dispose();
         _timerService.Dispose();
         _updateService.Stop();
     }
