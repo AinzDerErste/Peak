@@ -1,0 +1,60 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Set version in csproj
+        shell: pwsh
+        run: |
+          $file = "src/Peak.App/Peak.App.csproj"
+          $content = Get-Content $file -Raw
+          $content = $content -replace '<Version>.*?</Version>', "<Version>${{ steps.version.outputs.VERSION }}</Version>"
+          Set-Content $file $content
+
+      - name: Publish
+        run: dotnet publish src/Peak.App/Peak.App.csproj -c Release
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Update installer version
+        shell: pwsh
+        run: |
+          $file = "installer/peak-setup.iss"
+          $content = Get-Content $file -Raw
+          $content = $content -replace '#define MyAppVersion ".*?"', '#define MyAppVersion "${{ steps.version.outputs.VERSION }}"'
+          Set-Content $file $content
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/peak-setup.iss
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Peak v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: installer/output/PeakSetup.exe
