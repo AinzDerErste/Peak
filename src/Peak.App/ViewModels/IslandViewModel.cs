@@ -284,6 +284,37 @@ public partial class IslandViewModel : ObservableObject
         SaveSlotLayout();
     }
 
+    public WidgetType GetSlot(int index) => index switch
+    {
+        0 => Slot0, 1 => Slot1, 2 => Slot2,
+        3 => Slot3, 4 => Slot4, 5 => Slot5,
+        _ => WidgetType.None
+    };
+
+    public void SwapSlots(int fromIndex, int toIndex)
+    {
+        if (fromIndex == toIndex || fromIndex < 0 || fromIndex > 5 || toIndex < 0 || toIndex > 5) return;
+
+        var fromType = GetSlot(fromIndex);
+        var toType = GetSlot(toIndex);
+        SetSlotDirect(fromIndex, toType);
+        SetSlotDirect(toIndex, fromType);
+        SaveSlotLayout();
+    }
+
+    private void SetSlotDirect(int index, WidgetType type)
+    {
+        switch (index)
+        {
+            case 0: Slot0 = type; break;
+            case 1: Slot1 = type; break;
+            case 2: Slot2 = type; break;
+            case 3: Slot3 = type; break;
+            case 4: Slot4 = type; break;
+            case 5: Slot5 = type; break;
+        }
+    }
+
     public void SetRowMode(int row, RowMode mode)
     {
         switch (row)
