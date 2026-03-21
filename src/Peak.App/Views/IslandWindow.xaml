@@ -232,16 +232,32 @@
                             <ContentControl x:Name="SlotHost0" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
                             <ContentControl x:Name="SlotHost1" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
                             <Border x:Name="EditOverlay0" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
-                                    Visibility="Collapsed" Cursor="Hand" MouseDown="OnEditSlotClick" Tag="0">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="0"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot0}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Cursor="Hand" MouseDown="OnEditSlotClick" Tag="0"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="0"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot0}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="0"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                             <Border x:Name="EditOverlay1" Grid.Column="1" Background="#F0050505" CornerRadius="8" Margin="6,0,0,0"
-                                    Visibility="Collapsed" Tag="1">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="1"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot1}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Tag="1"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="1"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot1}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="1"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                         </Grid>
                     </DockPanel>
@@ -286,16 +302,32 @@
                             <ContentControl x:Name="SlotHost2" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
                             <ContentControl x:Name="SlotHost3" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
                             <Border x:Name="EditOverlay2" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
-                                    Visibility="Collapsed" Tag="2">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="2"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot2}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Tag="2"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="2"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot2}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="2"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                             <Border x:Name="EditOverlay3" Grid.Column="1" Background="#F0050505" CornerRadius="8" Margin="6,0,0,0"
-                                    Visibility="Collapsed" Tag="3">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="3"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot3}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Tag="3"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="3"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot3}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="3"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                         </Grid>
                     </DockPanel>
@@ -318,16 +350,32 @@
                             <ContentControl x:Name="SlotHost4" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
                             <ContentControl x:Name="SlotHost5" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
                             <Border x:Name="EditOverlay4" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
-                                    Visibility="Collapsed" Tag="4">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="4"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot4}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Tag="4"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="4"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot4}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="4"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                             <Border x:Name="EditOverlay5" Grid.Column="1" Background="#F0050505" CornerRadius="8" Margin="6,0,0,0"
-                                    Visibility="Collapsed" Tag="5">
-                                <ComboBox Style="{StaticResource SlotComboBox}" Tag="5"
-                                          ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot5}"
-                                          SelectionChanged="OnSlotSelectionChanged" />
+                                    Visibility="Collapsed" Tag="5"
+                                    AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
+                                    DragEnter="OnEditOverlayDragEnter" DragLeave="OnEditOverlayDragLeave">
+                                <Grid>
+                                    <ComboBox Style="{StaticResource SlotComboBox}" Tag="5"
+                                              ItemsSource="{Binding AvailableWidgets}" SelectedItem="{Binding Slot5}"
+                                              SelectionChanged="OnSlotSelectionChanged" />
+                                    <TextBlock Text="⠿" Foreground="#55FFFFFF" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0"
+                                               Cursor="SizeAll" MouseDown="OnDragHandleMouseDown" Tag="5"
+                                               ToolTip="Drag to swap" />
+                                </Grid>
                             </Border>
                         </Grid>
                     </DockPanel>

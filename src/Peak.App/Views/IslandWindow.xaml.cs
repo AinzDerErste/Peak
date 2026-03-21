@@ -42,9 +42,13 @@ public partial class IslandWindow : Window
     private const double FixedWindowHeight = 400;
     private const double TopOffset = 8;
 
-    // GPU-accelerated animation
-    private static readonly Duration AnimDuration = new(TimeSpan.FromMilliseconds(280));
+    // GPU-accelerated animation — state-specific timing
+    private static readonly Duration ExpandDuration = new(TimeSpan.FromMilliseconds(300));
+    private static readonly Duration CollapseDuration = new(TimeSpan.FromMilliseconds(220));
+    private static readonly Duration PeekDuration = new(TimeSpan.FromMilliseconds(250));
+    private static readonly Duration AnimDuration = new(TimeSpan.FromMilliseconds(280)); // fallback / hide-unhide
     private static readonly IEasingFunction AnimEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+    private static readonly IEasingFunction ExpandEase = new QuadraticEase { EasingMode = EasingMode.EaseInOut };
 
     // Current actual size
     private double _currentW;
@@ -347,6 +351,88 @@ public partial class IslandWindow : Window
         // Handled by ComboBox inside the overlay
     }
 
+    // ─── Widget Drag & Drop (Edit Mode) ─────────────────────────
+
+    private const string SlotDragFormat = "PeakSlotIndex";
+    private Border? _dragHighlightOverlay;
+    private bool _isWidgetDragging;
+
+    private void OnDragHandleMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!_viewModel.IsEditMode) return;
+        if (sender is not TextBlock tb || tb.Tag is not string tagStr || !int.TryParse(tagStr, out var slotIndex)) return;
+
+        // Find the parent edit overlay
+        var overlay = _editOverlays[slotIndex];
+        overlay.Opacity = 0.5;
+        _isWidgetDragging = true;
+
+        var data = new DataObject(SlotDragFormat, slotIndex);
+        DragDrop.DoDragDrop(overlay, data, DragDropEffects.Move);
+
+        // Reset after drag ends
+        _isWidgetDragging = false;
+        overlay.Opacity = 1.0;
+        ClearDragHighlight();
+    }
+
+    private void OnEditOverlayDragEnter(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(SlotDragFormat)) return;
+        if (sender is Border border)
+        {
+            _dragHighlightOverlay = border;
+            border.BorderBrush = (Brush)FindResource("AccentBrush");
+            border.BorderThickness = new Thickness(2);
+        }
+        e.Handled = true;
+    }
+
+    private void OnEditOverlayDragLeave(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(SlotDragFormat)) return;
+        if (sender is Border border)
+        {
+            border.BorderBrush = null;
+            border.BorderThickness = new Thickness(0);
+            if (_dragHighlightOverlay == border) _dragHighlightOverlay = null;
+        }
+        e.Handled = true;
+    }
+
+    private void OnEditOverlayDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(SlotDragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnEditOverlayDrop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(SlotDragFormat)) return;
+        if (sender is not Border border || border.Tag is not string tagStr || !int.TryParse(tagStr, out var toIndex)) return;
+
+        var fromIndex = (int)e.Data.GetData(SlotDragFormat)!;
+        if (fromIndex != toIndex)
+        {
+            _viewModel.SwapSlots(fromIndex, toIndex);
+            RenderSlot(fromIndex, GetSlot(fromIndex));
+            RenderSlot(toIndex, GetSlot(toIndex));
+        }
+
+        ClearDragHighlight();
+        e.Handled = true;
+    }
+
+    private void ClearDragHighlight()
+    {
+        if (_dragHighlightOverlay != null)
+        {
+            _dragHighlightOverlay.BorderBrush = null;
+            _dragHighlightOverlay.BorderThickness = new Thickness(0);
+            _dragHighlightOverlay = null;
+        }
+    }
+
     // ─── Notification Banner ─────────────────────────────────────
 
     private void UpdateNotificationBanner()
@@ -465,8 +551,19 @@ public partial class IslandWindow : Window
         GreetingText.Visibility = Visibility.Visible;
         CollapsedContent.Visibility = Visibility.Collapsed;
 
-        // Fade in greeting
-        var fadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(200)));
+        // Slide-in from top + fade in
+        GreetingText.RenderTransform = new TranslateTransform(0, -10);
+        var fadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(250)))
+        {
+            EasingFunction = AnimEase
+        };
+        var slideIn = new DoubleAnimation(-10, 0, new Duration(TimeSpan.FromMilliseconds(250)))
+        {
+            EasingFunction = AnimEase,
+            FillBehavior = FillBehavior.Stop
+        };
+        slideIn.Completed += (_, _) => ((TranslateTransform)GreetingText.RenderTransform).Y = 0;
+
         fadeIn.Completed += (_, _) =>
         {
             // After 5 seconds, fade out greeting and show normal content
@@ -475,13 +572,18 @@ public partial class IslandWindow : Window
             {
                 timer.Stop();
                 var fadeOut = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromMilliseconds(200)));
+                var slideOut = new DoubleAnimation(0, -8, new Duration(TimeSpan.FromMilliseconds(200)))
+                {
+                    EasingFunction = AnimEase,
+                    FillBehavior = FillBehavior.Stop
+                };
                 fadeOut.Completed += (_, _) =>
                 {
                     GreetingText.Visibility = Visibility.Collapsed;
                     GreetingText.BeginAnimation(OpacityProperty, null);
                     GreetingText.Opacity = 0;
 
-                    // Show normal collapsed content with fade in — no further transitions needed
+                    // Show normal collapsed content with fade in
                     CollapsedContent.Visibility = Visibility.Visible;
                     var contentFadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(250)))
                     {
@@ -491,10 +593,12 @@ public partial class IslandWindow : Window
                     CollapsedContent.BeginAnimation(OpacityProperty, contentFadeIn);
                 };
                 GreetingText.BeginAnimation(OpacityProperty, fadeOut);
+                ((TranslateTransform)GreetingText.RenderTransform).BeginAnimation(TranslateTransform.YProperty, slideOut);
             };
             timer.Start();
         };
         GreetingText.BeginAnimation(OpacityProperty, fadeIn);
+        ((TranslateTransform)GreetingText.RenderTransform).BeginAnimation(TranslateTransform.YProperty, slideIn);
     }
 
     // ─── Mouse Interaction ───────────────────────────────────────
@@ -528,7 +632,7 @@ public partial class IslandWindow : Window
     {
         if (_viewModel.IsEditMode) return;
         if (_viewModel.CurrentState == IslandState.Hidden) return;
-        if (_isDragging) return; // Don't collapse while dragging files
+        if (_isDragging || _isWidgetDragging) return;
         StartMousePolling();
     }
 
@@ -575,6 +679,7 @@ public partial class IslandWindow : Window
 
     private void OnIslandDragLeave(object sender, DragEventArgs e)
     {
+        if (_isWidgetDragging || _viewModel.IsEditMode) return;
         // Don't collapse immediately — wait to see if DragOver fires again
         StartDragLeaveTimer();
     }
@@ -655,7 +760,7 @@ public partial class IslandWindow : Window
     {
         if (_viewModel.IsEditMode) { StopMousePolling(); return; }
         if (_viewModel.CurrentState == IslandState.Hidden) { StopMousePolling(); return; }
-        if (_isDragging) { StopMousePolling(); return; }
+        if (_isDragging || _isWidgetDragging) { StopMousePolling(); return; }
 
         if (IsMouseOverIsland())
         {
@@ -1004,14 +1109,25 @@ public partial class IslandWindow : Window
         _scaleTransform.ScaleX = startScaleX;
         _scaleTransform.ScaleY = startScaleY;
 
-        var scaleXAnim = new DoubleAnimation(1.0, AnimDuration)
+        // State-specific timing and easing
+        bool isExpanding = state == IslandState.Expanded;
+        bool isCollapsing = state == IslandState.Collapsed;
+        bool isPeek = state == IslandState.Peek;
+
+        var duration = isExpanding ? ExpandDuration
+            : isCollapsing ? CollapseDuration
+            : PeekDuration;
+        var ease = isExpanding ? ExpandEase : AnimEase;
+        var durationMs = isExpanding ? 300.0 : isCollapsing ? 220.0 : 250.0;
+
+        var scaleXAnim = new DoubleAnimation(1.0, duration)
         {
-            EasingFunction = AnimEase,
+            EasingFunction = ease,
             FillBehavior = FillBehavior.Stop
         };
-        var scaleYAnim = new DoubleAnimation(1.0, AnimDuration)
+        var scaleYAnim = new DoubleAnimation(1.0, duration)
         {
-            EasingFunction = AnimEase,
+            EasingFunction = ease,
             FillBehavior = FillBehavior.Stop
         };
 
@@ -1023,17 +1139,25 @@ public partial class IslandWindow : Window
             _ => CollapsedContent
         };
 
-        scaleYAnim.Completed += (_, _) =>
+        // Start content fade-in at 60% of scale duration (parallel, not sequential)
+        var fadeDelay = TimeSpan.FromMilliseconds(durationMs * 0.6);
+        var fadeTimer = new DispatcherTimer { Interval = fadeDelay };
+        fadeTimer.Tick += (_, _) =>
         {
-            _scaleTransform.ScaleX = 1.0;
-            _scaleTransform.ScaleY = 1.0;
-
+            fadeTimer.Stop();
             var fadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(120)))
             {
                 FillBehavior = FillBehavior.Stop
             };
             fadeIn.Completed += (_, _) => activeContent.Opacity = 1;
             activeContent.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        fadeTimer.Start();
+
+        scaleYAnim.Completed += (_, _) =>
+        {
+            _scaleTransform.ScaleX = 1.0;
+            _scaleTransform.ScaleY = 1.0;
         };
 
         _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
