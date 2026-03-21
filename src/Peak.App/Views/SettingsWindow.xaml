@@ -435,6 +435,16 @@
                             </DockPanel>
                         </Border>
 
+                        <!-- Theme Presets -->
+                        <TextBlock Text="THEME PRESETS" Style="{StaticResource SectionHeader}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="Quick theme selection" Style="{StaticResource SubLabel}" Margin="0,0,0,8" />
+                                <WrapPanel x:Name="ThemePresetsPanel" Orientation="Horizontal" />
+                            </StackPanel>
+                        </Border>
+
                         <!-- Colors -->
                         <TextBlock Text="COLORS" Style="{StaticResource SectionHeader}" />
 

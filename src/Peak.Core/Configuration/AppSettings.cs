@@ -20,7 +20,8 @@ public enum WidgetType
     Network,
     QuickAccess,
     Clipboard,
-    QuickNotes
+    QuickNotes,
+    VolumeMixer
 }
 
 public enum RowMode
@@ -74,6 +75,7 @@ public class AppSettings
     public bool ShowBorder { get; set; } = true;
     public string IslandBackground { get; set; } = "#FF000000";
     public string AccentColor { get; set; } = "#FF60CDFF";
+    public string ThemePreset { get; set; } = "default";
 
     // Auto-hide: slide island behind top edge after idle
     public bool AutoHideEnabled { get; set; } = false;

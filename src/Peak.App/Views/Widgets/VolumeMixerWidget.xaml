@@ -1,0 +1,86 @@
+<UserControl x:Class="Peak.App.Views.Widgets.VolumeMixerWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="{StaticResource InterFont}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Margin="0,0,0,4">
+            <TextBlock Text="Volume Mixer" Foreground="#88FFFFFF" FontSize="10"
+                       VerticalAlignment="Center" />
+        </Grid>
+
+        <!-- Session list -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="0" Margin="0">
+            <ItemsControl x:Name="SessionList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,2,0,2" Height="22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="18" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Mute toggle -->
+                            <Border Background="Transparent" Cursor="Hand"
+                                    MouseDown="OnMuteClick" Tag="{Binding Id}"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock FontSize="12" VerticalAlignment="Center"
+                                           HorizontalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="&#x1F50A;" />
+                                            <Setter Property="Foreground" Value="#AAFFFFFF" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                                    <Setter Property="Text" Value="&#x1F507;" />
+                                                    <Setter Property="Foreground" Value="#55FFFFFF" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
+
+                            <!-- Slider area -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0">
+                                <TextBlock Text="{Binding DisplayName}" Foreground="#BBFFFFFF"
+                                           FontSize="9" TextTrimming="CharacterEllipsis"
+                                           Margin="0,0,0,1" />
+                                <ProgressBar Value="{Binding Volume}" Maximum="1"
+                                             Style="{StaticResource ThinProgress}"
+                                             Foreground="{DynamicResource AccentBrush}"
+                                             Width="Auto" Height="3"
+                                             Cursor="Hand"
+                                             MouseDown="OnVolumeBarClick"
+                                             Tag="{Binding Id}" />
+                            </StackPanel>
+
+                            <!-- Volume % -->
+                            <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                       Foreground="#88FFFFFF" FontSize="9"
+                                       Margin="6,0,0,0" Width="26" TextAlignment="Right">
+                                <TextBlock.Text>
+                                    <Binding Path="Volume" StringFormat="{}{0:P0}" />
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- No sessions placeholder -->
+        <TextBlock x:Name="NoSessionsText" Grid.Row="1"
+                   Text="No audio sessions" Foreground="#44FFFFFF" FontSize="11"
+                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                   Visibility="Collapsed" />
+    </Grid>
+</UserControl>

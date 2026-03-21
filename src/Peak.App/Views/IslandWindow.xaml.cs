@@ -240,6 +240,7 @@ public partial class IslandWindow : Window
             WidgetType.QuickAccess => new QuickAccessWidget { DataContext = _viewModel },
             WidgetType.Clipboard => new ClipboardWidget { DataContext = _viewModel },
             WidgetType.QuickNotes => new QuickNotesWidget { DataContext = _viewModel },
+            WidgetType.VolumeMixer => new VolumeMixerWidget { DataContext = _viewModel },
             _ => null
         };
 

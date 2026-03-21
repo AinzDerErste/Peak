@@ -53,6 +53,7 @@ public partial class App : Application
                     services.AddSingleton<TimerService>();
                     services.AddSingleton<ClipboardService>();
                     services.AddSingleton<NotesService>();
+                    services.AddSingleton<VolumeMixerService>();
                     services.AddSingleton<WidgetRegistry>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();
@@ -183,6 +184,7 @@ public partial class App : Application
         registry.Register("quickaccess", "Quick Access", dc => new QuickAccessWidget { DataContext = dc });
         registry.Register("clipboard", "Clipboard", dc => new ClipboardWidget { DataContext = dc });
         registry.Register("quicknotes", "Quick Notes", dc => new QuickNotesWidget { DataContext = dc });
+        registry.Register("volumemixer", "Volume Mixer", dc => new VolumeMixerWidget { DataContext = dc });
     }
 
     private void LoadPlugins(WidgetRegistry registry, SettingsManager settingsManager, IServiceProvider services)

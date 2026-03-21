@@ -32,6 +32,7 @@ public partial class IslandViewModel : ObservableObject
     private readonly UpdateService _updateService;
     private readonly ClipboardService _clipboardService;
     private readonly NotesService _notesService;
+    private readonly VolumeMixerService _volumeMixerService;
     private readonly SettingsManager _settingsManager;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _autoCollapseTimer;
@@ -128,6 +129,9 @@ public partial class IslandViewModel : ObservableObject
     public ObservableCollection<NoteItem> Notes { get; } = new();
     [ObservableProperty] private NoteItem? _selectedNote;
 
+    // Volume Mixer
+    public ObservableCollection<AudioSession> AudioSessions { get; } = new();
+
     // Collapsed-state slots (Left, Center, Right)
     [ObservableProperty] private CollapsedWidget _collapsedLeft = CollapsedWidget.WeatherIcon;
     [ObservableProperty] private CollapsedWidget _collapsedCenter = CollapsedWidget.Clock;
@@ -156,6 +160,7 @@ public partial class IslandViewModel : ObservableObject
         UpdateService updateService,
         ClipboardService clipboardService,
         NotesService notesService,
+        VolumeMixerService volumeMixerService,
         SettingsManager settingsManager)
     {
         _mediaService = mediaService;
@@ -168,6 +173,7 @@ public partial class IslandViewModel : ObservableObject
         _updateService = updateService;
         _clipboardService = clipboardService;
         _notesService = notesService;
+        _volumeMixerService = volumeMixerService;
         _settingsManager = settingsManager;
         _dispatcher = Dispatcher.CurrentDispatcher;
 
@@ -234,6 +240,7 @@ public partial class IslandViewModel : ObservableObject
         await RefreshCalendarAsync();
         InitializeClipboard();
         InitializeNotes();
+        InitializeVolumeMixer();
     }
 
     private void LoadSlotLayout()
@@ -781,6 +788,39 @@ public partial class IslandViewModel : ObservableObject
             _notesService.UpdateNote(SelectedNote);
     }
 
+    // ─── Volume Mixer ─────────────────────────────────────────
+
+    private DispatcherTimer? _volumeMixerTimer;
+
+    private void InitializeVolumeMixer()
+    {
+        _volumeMixerService.Initialize();
+        _volumeMixerService.SessionsChanged += () => _dispatcher.Invoke(RefreshAudioSessions);
+
+        // Poll every 1s
+        _volumeMixerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _volumeMixerTimer.Tick += (_, _) => _volumeMixerService.Refresh();
+        _volumeMixerTimer.Start();
+
+        // Initial refresh
+        _volumeMixerService.Refresh();
+    }
+
+    private void RefreshAudioSessions()
+    {
+        var sessions = _volumeMixerService.GetSessions();
+        AudioSessions.Clear();
+        foreach (var s in sessions)
+            AudioSessions.Add(s);
+    }
+
+    [RelayCommand]
+    private void ToggleMute(string sessionId) => _volumeMixerService.ToggleMute(sessionId);
+
+    [RelayCommand]
+    private void SetSessionVolume((string Id, float Volume) args) =>
+        _volumeMixerService.SetVolume(args.Id, args.Volume);
+
     public void Cleanup()
     {
         _clockTimer.Stop();
@@ -793,6 +833,8 @@ public partial class IslandViewModel : ObservableObject
         _notificationService.Dispose();
         _clipboardService.Dispose();
         _notesService.Dispose();
+        _volumeMixerTimer?.Stop();
+        _volumeMixerService.Dispose();
         _timerService.Dispose();
         _updateService.Stop();
     }

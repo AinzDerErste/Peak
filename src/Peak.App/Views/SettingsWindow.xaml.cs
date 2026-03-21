@@ -50,6 +50,9 @@ public partial class SettingsWindow : Window
         HighlightColorCircle(AccentColorPanel, _selectedAccentColor);
         UpdateHexBoxes();
 
+        // Theme presets
+        BuildThemePresets(s.ThemePreset);
+
         // Collapsed layout
         LoadCollapsedCombos(s.CollapsedSlots);
 
@@ -126,6 +129,7 @@ public partial class SettingsWindow : Window
 
         s.IslandBackground = _selectedBgColor;
         s.AccentColor = _selectedAccentColor;
+        s.ThemePreset = _selectedThemePreset;
         App.UpdateThemeColors(_selectedBgColor, _selectedAccentColor);
 
         s.WeatherPostalCode = PostalCodeBox.Text.Trim();
@@ -166,14 +170,86 @@ public partial class SettingsWindow : Window
             : "Island only appears for events (media, notifications)";
     }
 
+    private string _selectedThemePreset = "default";
+
+    private void BuildThemePresets(string activePreset)
+    {
+        _selectedThemePreset = activePreset;
+        ThemePresetsPanel.Children.Clear();
+
+        foreach (var (name, (bg, accent)) in ThemePresets.GetAll())
+        {
+            var bgColor = (Color)ColorConverter.ConvertFromString(bg);
+            var accentColor = (Color)ColorConverter.ConvertFromString(accent);
+
+            var grid = new Grid { Width = 44, Height = 44, Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand };
+            grid.Tag = name;
+            grid.MouseDown += OnThemePresetClick;
+
+            // Background circle
+            var bgCircle = new Ellipse
+            {
+                Width = 36, Height = 36,
+                Fill = new SolidColorBrush(bgColor),
+                Stroke = name == activePreset ? Brushes.White : new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+                StrokeThickness = name == activePreset ? 2 : 1
+            };
+            grid.Children.Add(bgCircle);
+
+            // Accent dot
+            var accentDot = new Ellipse
+            {
+                Width = 14, Height = 14,
+                Fill = new SolidColorBrush(accentColor),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            grid.Children.Add(accentDot);
+
+            // Label
+            var label = new TextBlock
+            {
+                Text = char.ToUpper(name[0]) + name[1..],
+                Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                FontSize = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, 0, -12)
+            };
+            grid.Children.Add(label);
+
+            ThemePresetsPanel.Children.Add(grid);
+        }
+    }
+
+    private void OnThemePresetClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Grid grid || grid.Tag is not string name) return;
+
+        var preset = ThemePresets.GetPreset(name);
+        if (preset == null) return;
+
+        _selectedThemePreset = name;
+        _selectedBgColor = preset.Value.Background;
+        _selectedAccentColor = preset.Value.Accent;
+
+        HighlightColorCircle(BgColorPanel, _selectedBgColor);
+        HighlightColorCircle(AccentColorPanel, _selectedAccentColor);
+        UpdateHexBoxes();
+        App.UpdateThemeColors(_selectedBgColor, _selectedAccentColor);
+        BuildThemePresets(name); // refresh highlights
+    }
+
     private void OnBgColorClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is Ellipse ellipse && ellipse.Tag is string hex)
         {
             _selectedBgColor = hex;
+            _selectedThemePreset = "custom";
             HighlightColorCircle(BgColorPanel, hex);
             UpdateHexBoxes();
             App.UpdateThemeColors(_selectedBgColor, _selectedAccentColor);
+            BuildThemePresets("custom");
         }
     }
 
@@ -182,9 +258,11 @@ public partial class SettingsWindow : Window
         if (sender is Ellipse ellipse && ellipse.Tag is string hex)
         {
             _selectedAccentColor = hex;
+            _selectedThemePreset = "custom";
             HighlightColorCircle(AccentColorPanel, hex);
             UpdateHexBoxes();
             App.UpdateThemeColors(_selectedBgColor, _selectedAccentColor);
+            BuildThemePresets("custom");
         }
     }
 
