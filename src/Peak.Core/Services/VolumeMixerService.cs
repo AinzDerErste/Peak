@@ -62,6 +62,13 @@ public class VolumeMixerService : IDisposable
                 var name = GetSessionName(session);
                 if (string.IsNullOrEmpty(name)) continue;
 
+                // Filter system services (AudioSrv, etc.)
+                if (name.Contains("AudioSrv", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("%SystemRoot%", StringComparison.OrdinalIgnoreCase))
+                {
+                    name = "System Sounds";
+                }
+
                 newSessions.Add(new AudioSession
                 {
                     Id = session.GetSessionIdentifier ?? $"session_{i}",
