@@ -145,19 +145,19 @@ public partial class App : Application
         exitItem.Click += (_, _) => ExitApplication();
         contextMenu.Items.Add(exitItem);
 
-        var versionText = new System.Windows.Controls.TextBlock
+        var versionItem = new System.Windows.Controls.MenuItem
         {
-            Text = $"v{UpdateService.CurrentVersion}",
-            Foreground = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
-            FontSize = 10,
-            FontFamily = (System.Windows.Media.FontFamily)FindResource("InterFont"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextAlignment = System.Windows.TextAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 2),
             IsHitTestVisible = false,
-            Focusable = false
+            Focusable = false,
+            IsEnabled = false,
+            Style = menuStyle,
+            Header = $"v{UpdateService.CurrentVersion}",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+            FontSize = 10,
         };
-        contextMenu.Items.Add(versionText);
+        // Override template to center text without icon
+        versionItem.Template = CreateVersionTemplate();
+        contextMenu.Items.Add(versionItem);
 
         _trayIcon.ContextMenu = contextMenu;
         _trayIcon.TrayMouseDoubleClick += (_, _) => ToggleVisibility();
@@ -174,6 +174,26 @@ public partial class App : Application
             Current.Resources["AccentBrush"] = new SolidColorBrush(accent);
         }
         catch { /* invalid color string — keep defaults */ }
+    }
+
+    private static System.Windows.Controls.ControlTemplate CreateVersionTemplate()
+    {
+        var template = new System.Windows.Controls.ControlTemplate(typeof(System.Windows.Controls.MenuItem));
+        var border = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+        border.SetValue(System.Windows.Controls.Border.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+        border.SetValue(System.Windows.Controls.Border.PaddingProperty, new Thickness(0, 4, 0, 2));
+
+        var text = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+        text.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new System.Windows.Data.Binding("Header") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+        text.SetValue(System.Windows.Controls.TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)));
+        text.SetValue(System.Windows.Controls.TextBlock.FontSizeProperty, 10.0);
+        text.SetValue(System.Windows.Controls.TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        text.SetValue(System.Windows.Controls.TextBlock.TextAlignmentProperty, System.Windows.TextAlignment.Center);
+        text.SetValue(System.Windows.Controls.TextBlock.FontFamilyProperty, Current.FindResource("InterFont"));
+
+        border.AppendChild(text);
+        template.VisualTree = border;
+        return template;
     }
 
     private static System.Windows.Shapes.Path MakeMenuIcon(string resourceKey)
