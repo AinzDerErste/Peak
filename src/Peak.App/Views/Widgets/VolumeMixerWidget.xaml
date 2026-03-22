@@ -4,11 +4,12 @@
              FontFamily="{StaticResource InterFont}">
     <Grid>
         <!-- Session list -->
-        <ScrollViewer VerticalScrollBarVisibility="Hidden"
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       CanContentScroll="True"
                       PreviewMouseWheel="OnListScroll"
-                      Padding="0" Margin="0">
+                      Padding="0" Margin="0"
+                      MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=ContentPresenter}}">
             <ItemsControl x:Name="SessionList" ItemsSource="{Binding AudioSessions}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
