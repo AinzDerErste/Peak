@@ -113,6 +113,8 @@
             </Setter>
         </Style>
         <!-- Windows 11 Context Menu -->
+        <DropShadowEffect x:Key="Win11Shadow" BlurRadius="16" ShadowDepth="4"
+                          Direction="270" Opacity="0.4" Color="Black" />
         <Style x:Key="Win11ContextMenu" TargetType="ContextMenu">
             <Setter Property="Background" Value="#F02C2C2C" />
             <Setter Property="Foreground" Value="#EEFFFFFF" />
@@ -136,8 +138,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <DropShadowEffect x:Key="Win11Shadow" BlurRadius="16" ShadowDepth="4"
-                          Direction="270" Opacity="0.4" Color="Black" />
         <Style x:Key="Win11MenuItem" TargetType="MenuItem">
             <Setter Property="Foreground" Value="#EEFFFFFF" />
             <Setter Property="FontFamily" Value="{StaticResource InterFont}" />
