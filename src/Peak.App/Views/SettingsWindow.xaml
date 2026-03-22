@@ -611,6 +611,12 @@
                                     <TextBlock Text="Notifications" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
                                     <CheckBox x:Name="ShowNotificationsCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
                                 </DockPanel>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock Text="Test notification peek" Style="{StaticResource SubLabel}" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                                    <Button Content="Test Peek" HorizontalAlignment="Right"
+                                            Style="{StaticResource AccentButton}" Padding="12,4"
+                                            Click="OnTestPeekClick" />
+                                </DockPanel>
                                 <Border Style="{StaticResource CardSep}" />
                                 <DockPanel>
                                     <TextBlock Text="Timer" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />

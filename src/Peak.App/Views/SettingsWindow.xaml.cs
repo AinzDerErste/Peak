@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Microsoft.Extensions.DependencyInjection;
+using Peak.App.ViewModels;
 using Peak.Core.Configuration;
 using Peak.Core.Services;
 
@@ -367,6 +368,17 @@ public partial class SettingsWindow : Window
         }
 
         CheckUpdateButton.IsEnabled = true;
+    }
+
+    private void OnTestPeekClick(object sender, RoutedEventArgs e)
+    {
+        var vm = ((App)Application.Current).Services.GetRequiredService<IslandViewModel>();
+        vm.NotificationTitle = "Test Notification";
+        vm.NotificationBody = "This is a test peek notification from Peak.";
+        vm.NotificationApp = "Peak Settings";
+        vm.NotificationIcon = null;
+        vm.HasNotification = true;
+        vm.ShowPeek();
     }
 
     private void DragWindow(object sender, MouseButtonEventArgs e)
