@@ -9,7 +9,7 @@
                       CanContentScroll="True"
                       PreviewMouseWheel="OnListScroll"
                       Padding="0" Margin="0"
-                      MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=ContentPresenter}}">
+                      MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
             <ItemsControl x:Name="SessionList" ItemsSource="{Binding AudioSessions}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

@@ -46,20 +46,22 @@ public partial class VolumeMixerWidget : UserControl
 
     private void OnListScroll(object sender, MouseWheelEventArgs e)
     {
-        // Check if mouse is over a ProgressBar — let volume scroll handle it
-        if (e.OriginalSource is FrameworkElement fe)
-        {
-            var bar = FindParent<ProgressBar>(fe);
-            if (bar != null)
-            {
-                OnVolumeBarScroll(bar, e);
-                return;
-            }
-        }
-
-        // Otherwise scroll the list
+        // Check if mouse is directly over a ProgressBar — adjust volume
         if (sender is ScrollViewer sv)
         {
+            var pos = e.GetPosition(sv);
+            var hit = System.Windows.Media.VisualTreeHelper.HitTest(sv, pos);
+            if (hit?.VisualHit is DependencyObject hitObj)
+            {
+                var bar = FindParent<ProgressBar>(hitObj);
+                if (bar != null)
+                {
+                    OnVolumeBarScroll(bar, e);
+                    return;
+                }
+            }
+
+            // Scroll the list
             sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta / 3.0);
             e.Handled = true;
         }
