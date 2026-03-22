@@ -5,7 +5,8 @@
              MaxHeight="120">
     <Grid>
         <!-- Session list -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
+        <ScrollViewer Style="{StaticResource SlimScrollViewer}"
+                      VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       CanContentScroll="True"
                       PreviewMouseWheel="OnListScroll"
