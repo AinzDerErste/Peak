@@ -38,17 +38,6 @@ public class VolumeMixerService : IDisposable
 
         try
         {
-            // Master volume
-            var vol = _device.AudioEndpointVolume;
-            newSessions.Add(new AudioSession
-            {
-                Id = "master",
-                DisplayName = "Master",
-                Volume = vol.MasterVolumeLevelScalar,
-                IsMuted = vol.Mute,
-                IsMaster = true
-            });
-
             // Per-app sessions
             var sessionManager = _device.AudioSessionManager;
             var sessions = sessionManager.Sessions;
@@ -127,12 +116,6 @@ public class VolumeMixerService : IDisposable
 
         try
         {
-            if (sessionId == "master")
-            {
-                _device.AudioEndpointVolume.MasterVolumeLevelScalar = volume;
-                return;
-            }
-
             var sessions = _device.AudioSessionManager.Sessions;
             for (int i = 0; i < sessions.Count; i++)
             {
@@ -152,12 +135,6 @@ public class VolumeMixerService : IDisposable
 
         try
         {
-            if (sessionId == "master")
-            {
-                _device.AudioEndpointVolume.Mute = !_device.AudioEndpointVolume.Mute;
-                return;
-            }
-
             var sessions = _device.AudioSessionManager.Sessions;
             for (int i = 0; i < sessions.Count; i++)
             {
