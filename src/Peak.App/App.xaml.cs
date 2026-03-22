@@ -145,6 +145,17 @@ public partial class App : Application
         exitItem.Click += (_, _) => ExitApplication();
         contextMenu.Items.Add(exitItem);
 
+        var versionText = new System.Windows.Controls.TextBlock
+        {
+            Text = $"v{UpdateService.CurrentVersion}",
+            Foreground = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
+            FontSize = 10,
+            FontFamily = (System.Windows.Media.FontFamily)FindResource("InterFont"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 2)
+        };
+        contextMenu.Items.Add(versionText);
+
         _trayIcon.ContextMenu = contextMenu;
         _trayIcon.TrayMouseDoubleClick += (_, _) => ToggleVisibility();
     }
