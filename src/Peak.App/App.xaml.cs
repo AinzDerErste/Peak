@@ -152,7 +152,10 @@ public partial class App : Application
             FontSize = 10,
             FontFamily = (System.Windows.Media.FontFamily)FindResource("InterFont"),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 2)
+            TextAlignment = System.Windows.TextAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 2),
+            IsHitTestVisible = false,
+            Focusable = false
         };
         contextMenu.Items.Add(versionText);
 
