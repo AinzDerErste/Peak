@@ -107,13 +107,19 @@ public partial class App : Application
             Visibility = Visibility.Visible
         };
 
-        var contextMenu = new System.Windows.Controls.ContextMenu();
+        var menuStyle = (Style)FindResource("Win11MenuItem");
+        var sepStyle = (Style)FindResource("Win11Separator");
 
-        var settingsItem = new System.Windows.Controls.MenuItem { Header = "Settings" };
+        var contextMenu = new System.Windows.Controls.ContextMenu
+        {
+            Style = (Style)FindResource("Win11ContextMenu")
+        };
+
+        var settingsItem = new System.Windows.Controls.MenuItem { Header = "⚙  Settings", Style = menuStyle };
         settingsItem.Click += (_, _) => OpenSettings();
         contextMenu.Items.Add(settingsItem);
 
-        var editLayoutItem = new System.Windows.Controls.MenuItem { Header = "Edit Layout" };
+        var editLayoutItem = new System.Windows.Controls.MenuItem { Header = "✏  Edit Layout", Style = menuStyle };
         editLayoutItem.Click += (_, _) =>
         {
             var vm = _host?.Services.GetRequiredService<IslandViewModel>();
@@ -121,7 +127,7 @@ public partial class App : Application
         };
         contextMenu.Items.Add(editLayoutItem);
 
-        var hideItem = new System.Windows.Controls.MenuItem { Header = "Hide Island" };
+        var hideItem = new System.Windows.Controls.MenuItem { Header = "👁  Hide Island", Style = menuStyle };
         hideItem.Click += (_, _) =>
         {
             var vm = _host?.Services.GetRequiredService<IslandViewModel>();
@@ -129,13 +135,13 @@ public partial class App : Application
         };
         contextMenu.Items.Add(hideItem);
 
-        var toggleItem = new System.Windows.Controls.MenuItem { Header = "Toggle Visibility" };
+        var toggleItem = new System.Windows.Controls.MenuItem { Header = "🔄  Toggle Visibility", Style = menuStyle };
         toggleItem.Click += (_, _) => ToggleVisibility();
         contextMenu.Items.Add(toggleItem);
 
-        contextMenu.Items.Add(new System.Windows.Controls.Separator());
+        contextMenu.Items.Add(new System.Windows.Controls.Separator { Style = sepStyle });
 
-        var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit" };
+        var exitItem = new System.Windows.Controls.MenuItem { Header = "✕  Exit", Style = menuStyle };
         exitItem.Click += (_, _) => ExitApplication();
         contextMenu.Items.Add(exitItem);
 
