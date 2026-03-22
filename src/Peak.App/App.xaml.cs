@@ -115,11 +115,11 @@ public partial class App : Application
             Style = (Style)FindResource("Win11ContextMenu")
         };
 
-        var settingsItem = new System.Windows.Controls.MenuItem { Header = "⚙  Settings", Style = menuStyle };
+        var settingsItem = new System.Windows.Controls.MenuItem { Header = "Settings", Style = menuStyle, Icon = MakeMenuIcon("IconGear") };
         settingsItem.Click += (_, _) => OpenSettings();
         contextMenu.Items.Add(settingsItem);
 
-        var editLayoutItem = new System.Windows.Controls.MenuItem { Header = "✏  Edit Layout", Style = menuStyle };
+        var editLayoutItem = new System.Windows.Controls.MenuItem { Header = "Edit Layout", Style = menuStyle, Icon = MakeMenuIcon("IconPen") };
         editLayoutItem.Click += (_, _) =>
         {
             var vm = _host?.Services.GetRequiredService<IslandViewModel>();
@@ -127,7 +127,7 @@ public partial class App : Application
         };
         contextMenu.Items.Add(editLayoutItem);
 
-        var hideItem = new System.Windows.Controls.MenuItem { Header = "👁  Hide Island", Style = menuStyle };
+        var hideItem = new System.Windows.Controls.MenuItem { Header = "Hide Island", Style = menuStyle, Icon = MakeMenuIcon("IconEyeSlash") };
         hideItem.Click += (_, _) =>
         {
             var vm = _host?.Services.GetRequiredService<IslandViewModel>();
@@ -135,13 +135,13 @@ public partial class App : Application
         };
         contextMenu.Items.Add(hideItem);
 
-        var toggleItem = new System.Windows.Controls.MenuItem { Header = "🔄  Toggle Visibility", Style = menuStyle };
+        var toggleItem = new System.Windows.Controls.MenuItem { Header = "Toggle Visibility", Style = menuStyle, Icon = MakeMenuIcon("IconArrowsRotate") };
         toggleItem.Click += (_, _) => ToggleVisibility();
         contextMenu.Items.Add(toggleItem);
 
         contextMenu.Items.Add(new System.Windows.Controls.Separator { Style = sepStyle });
 
-        var exitItem = new System.Windows.Controls.MenuItem { Header = "✕  Exit", Style = menuStyle };
+        var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit", Style = menuStyle, Icon = MakeMenuIcon("IconXmark") };
         exitItem.Click += (_, _) => ExitApplication();
         contextMenu.Items.Add(exitItem);
 
@@ -160,6 +160,19 @@ public partial class App : Application
             Current.Resources["AccentBrush"] = new SolidColorBrush(accent);
         }
         catch { /* invalid color string — keep defaults */ }
+    }
+
+    private static System.Windows.Shapes.Path MakeMenuIcon(string resourceKey)
+    {
+        var geometry = (System.Windows.Media.Geometry?)Current.TryFindResource(resourceKey);
+        return new System.Windows.Shapes.Path
+        {
+            Data = geometry,
+            Fill = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+            Stretch = System.Windows.Media.Stretch.Uniform,
+            Width = 12,
+            Height = 12
+        };
     }
 
     private void OpenSettings()
