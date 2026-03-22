@@ -3,19 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              FontFamily="{StaticResource InterFont}">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <Grid Margin="0,0,0,4">
-            <TextBlock Text="Volume Mixer" Foreground="#88FFFFFF" FontSize="10"
-                       VerticalAlignment="Center" />
-        </Grid>
-
         <!-- Session list -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden"
+        <ScrollViewer VerticalScrollBarVisibility="Hidden"
                       HorizontalScrollBarVisibility="Disabled"
                       CanContentScroll="True"
                       PreviewMouseWheel="OnListScroll"
@@ -81,7 +70,7 @@
         </ScrollViewer>
 
         <!-- No sessions placeholder -->
-        <TextBlock x:Name="NoSessionsText" Grid.Row="1"
+        <TextBlock x:Name="NoSessionsText"
                    Text="No audio sessions" Foreground="#44FFFFFF" FontSize="11"
                    VerticalAlignment="Center" HorizontalAlignment="Center"
                    Visibility="Collapsed" />
