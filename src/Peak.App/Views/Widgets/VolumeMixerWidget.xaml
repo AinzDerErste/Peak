@@ -24,22 +24,23 @@
                             <!-- Mute toggle -->
                             <Border Background="Transparent" Cursor="Hand"
                                     MouseDown="OnMuteClick" Tag="{Binding Id}"
-                                    VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock FontSize="12" VerticalAlignment="Center"
-                                           HorizontalAlignment="Center">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="&#x1F50A;" />
-                                            <Setter Property="Foreground" Value="#AAFFFFFF" />
+                                    VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    Width="14" Height="14">
+                                <Path Stretch="Uniform" Width="12" Height="12"
+                                      VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Data" Value="{StaticResource IconVolumeHigh}" />
+                                            <Setter Property="Fill" Value="#AAFFFFFF" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsMuted}" Value="True">
-                                                    <Setter Property="Text" Value="&#x1F507;" />
-                                                    <Setter Property="Foreground" Value="#55FFFFFF" />
+                                                    <Setter Property="Data" Value="{StaticResource IconVolumeMute}" />
+                                                    <Setter Property="Fill" Value="#55FFFFFF" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                    </Path.Style>
+                                </Path>
                             </Border>
 
                             <!-- Slider area -->
