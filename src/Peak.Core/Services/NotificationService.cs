@@ -22,6 +22,20 @@ public class NotificationService : IDisposable
             _listener = UserNotificationListener.Current;
             var access = await _listener.RequestAccessAsync();
             IsAvailable = access == UserNotificationListenerAccessStatus.Allowed;
+
+            if (IsAvailable)
+            {
+                // Prime the seen set with everything currently in the Action Center so
+                // we don't replay historical notifications on startup.
+                try
+                {
+                    var existing = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
+                    foreach (var n in existing)
+                        _seenIds.Add(n.Id);
+                }
+                catch { /* ignore — first poll will catch up */ }
+            }
+
             return IsAvailable;
         }
         catch
