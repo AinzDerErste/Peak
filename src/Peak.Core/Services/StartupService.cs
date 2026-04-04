@@ -22,7 +22,7 @@ public static class StartupService
         {
             var exePath = Environment.ProcessPath;
             if (exePath != null)
-                key.SetValue(AppName, $"\"{exePath}\" --minimized");
+                key.SetValue(AppName, $"\"{exePath}\"");
         }
         else
         {
