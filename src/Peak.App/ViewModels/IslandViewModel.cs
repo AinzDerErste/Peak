@@ -38,6 +38,7 @@ public partial class IslandViewModel : ObservableObject
     private readonly DispatcherTimer _autoCollapseTimer;
     private readonly DispatcherTimer _weatherTimer;
     private readonly Dispatcher _dispatcher;
+    private readonly Queue<NotificationData> _notificationQueue = new();
 
     [ObservableProperty] private IslandState _currentState = IslandState.Collapsed;
     [ObservableProperty] private string _currentTime = DateTime.Now.ToString("HH:mm");
@@ -86,6 +87,7 @@ public partial class IslandViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(PeekShowsMedia))]
     private bool _hasNotification;
     [ObservableProperty] private ImageSource? _notificationIcon;
+    public string CurrentNotificationAumid { get; private set; } = string.Empty;
 
     public bool PeekShowsMedia => HasMedia && !HasNotification;
 
@@ -202,6 +204,13 @@ public partial class IslandViewModel : ObservableObject
             _autoCollapseTimer.Stop();
             if (CurrentState is IslandState.Peek or IslandState.Expanded)
                 CurrentState = IslandState.Collapsed;
+
+            // If more notifications are queued, show the next one
+            if (_notificationQueue.Count > 0)
+            {
+                var next = _notificationQueue.Dequeue();
+                ShowNotificationData(next);
+            }
         };
 
         // Weather polling
@@ -496,46 +505,90 @@ public partial class IslandViewModel : ObservableObject
     {
         _dispatcher.Invoke(() =>
         {
-            NotificationTitle = data.Title;
-            NotificationBody = data.Body;
-            NotificationApp = data.AppName;
+            var settings = _settingsManager.Settings;
 
-            if (data.IconBytes is { Length: > 0 })
+            // Track seen apps so users can mute them in Settings
+            if (!string.IsNullOrEmpty(data.AppName) &&
+                !settings.SeenNotificationApps.Contains(data.AppName))
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.StreamSource = new MemoryStream(data.IconBytes);
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                bmp.Freeze();
-                NotificationIcon = bmp;
-            }
-            else
-            {
-                NotificationIcon = null;
+                settings.SeenNotificationApps.Add(data.AppName);
+                _settingsManager.Save();
             }
 
-            HasNotification = true;
+            // Respect per-app mute
+            if (settings.MutedNotificationApps.Contains(data.AppName))
+                return;
 
-            if (CurrentState == IslandState.Collapsed)
+            // If we're already peeking a notification, queue this one for after the current peek
+            if (CurrentState == IslandState.Peek && HasNotification)
             {
-                // Auto-peek to show the notification
-                ShowPeek();
+                _notificationQueue.Enqueue(data);
+                return;
             }
-            else if (CurrentState == IslandState.Peek)
-            {
-                // Already peeking — restart the auto-collapse timer
-                _autoCollapseTimer.Stop();
-                _autoCollapseTimer.Interval = TimeSpan.FromSeconds(_settingsManager.Settings.AutoCollapseSeconds);
-                _autoCollapseTimer.Start();
-            }
-            else if (CurrentState == IslandState.Expanded)
-            {
-                // Clear banner after 5 seconds when expanded
-                Task.Delay(TimeSpan.FromSeconds(5))
-                    .ContinueWith(_ => _dispatcher.Invoke(() => HasNotification = false));
-            }
+
+            ShowNotificationData(data);
         });
+    }
+
+    private void ShowNotificationData(NotificationData data)
+    {
+        NotificationTitle = data.Title;
+        NotificationBody = data.Body;
+        NotificationApp = data.AppName;
+        CurrentNotificationAumid = data.AppUserModelId;
+
+        if (data.IconBytes is { Length: > 0 })
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.StreamSource = new MemoryStream(data.IconBytes);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            bmp.Freeze();
+            NotificationIcon = bmp;
+        }
+        else
+        {
+            NotificationIcon = null;
+        }
+
+        HasNotification = true;
+
+        if (CurrentState == IslandState.Collapsed)
+        {
+            ShowPeek();
+        }
+        else if (CurrentState == IslandState.Expanded)
+        {
+            // Clear banner after 5 seconds when expanded
+            Task.Delay(TimeSpan.FromSeconds(5))
+                .ContinueWith(_ => _dispatcher.Invoke(() => HasNotification = false));
+        }
+    }
+
+    public void OpenCurrentNotificationApp()
+    {
+        var aumid = CurrentNotificationAumid;
+        if (string.IsNullOrWhiteSpace(aumid)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"shell:AppsFolder\\{aumid}",
+                UseShellExecute = true
+            });
+        }
+        catch { /* ignore — fail silently if app can't be launched */ }
+    }
+
+    public void DismissCurrentNotification()
+    {
+        HasNotification = false;
+        _notificationQueue.Clear();
+        if (CurrentState == IslandState.Peek)
+            CurrentState = IslandState.Collapsed;
+        _autoCollapseTimer.Stop();
     }
 
     private async Task RefreshWeatherAsync()
