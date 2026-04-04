@@ -270,24 +270,18 @@
 
                     <!-- Notification Banner (between Row 0 and Row 1) -->
                     <Border x:Name="NotificationBanner" Visibility="Collapsed"
-                            Background="#22FFFFFF" CornerRadius="10" Padding="12,8" Margin="0,6">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding NotificationApp}" Foreground="#66FFFFFF" FontSize="9"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding NotificationTitle}" Foreground="White" FontSize="12"
-                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding NotificationBody}" Foreground="#99FFFFFF" FontSize="10.5"
-                                           TextTrimming="CharacterEllipsis" MaxHeight="28" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="1" Text="&#xD7;" Foreground="#66FFFFFF" FontSize="16"
-                                       VerticalAlignment="Top" Cursor="Hand"
-                                       MouseDown="OnDismissNotification" Margin="8,0,0,0" />
-                        </Grid>
+                            Background="#22FFFFFF" CornerRadius="10" Padding="12,8" Margin="0,6"
+                            Cursor="Hand"
+                            MouseLeftButtonUp="OnPeekLeftClick"
+                            MouseRightButtonUp="OnPeekRightClick">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding NotificationApp}" Foreground="#66FFFFFF" FontSize="9"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding NotificationTitle}" Foreground="White" FontSize="12"
+                                       FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding NotificationBody}" Foreground="#99FFFFFF" FontSize="10.5"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="28" />
+                        </StackPanel>
                     </Border>
 
                     <!-- Separator 0-1 -->

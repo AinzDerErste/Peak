@@ -463,11 +463,6 @@ public partial class IslandWindow : Window
         }
     }
 
-    private void OnDismissNotification(object sender, MouseButtonEventArgs e)
-    {
-        _viewModel.HasNotification = false;
-    }
-
     private void OnPeekLeftClick(object sender, MouseButtonEventArgs e)
     {
         if (_viewModel.HasNotification)
