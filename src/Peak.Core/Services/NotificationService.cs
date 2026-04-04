@@ -78,6 +78,7 @@ public class NotificationService : IDisposable
                     {
                         Id = notif.Id,
                         AppName = notif.AppInfo?.DisplayInfo?.DisplayName ?? "Unknown",
+                        AppUserModelId = notif.AppInfo?.AppUserModelId ?? "",
                         Title = texts.Count > 0 ? texts[0].Text : "",
                         Body = texts.Count > 1 ? texts[1].Text : "",
                         Timestamp = notif.CreationTime,

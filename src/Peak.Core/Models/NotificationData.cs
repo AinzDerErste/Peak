@@ -8,4 +8,5 @@ public class NotificationData
     public DateTimeOffset Timestamp { get; set; }
     public uint Id { get; set; }
     public byte[]? IconBytes { get; set; }
+    public string AppUserModelId { get; set; } = string.Empty;
 }
