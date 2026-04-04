@@ -642,6 +642,12 @@ public partial class IslandWindow : Window
         StopMousePolling();
         if (_viewModel.CurrentState == IslandState.Hidden)
             return; // Hidden state is only toggled via hotkey
+
+        // While a notification is being peeked, let the user interact with the Peek
+        // (left-click open, right-click dismiss) instead of auto-expanding.
+        if (_viewModel.CurrentState == IslandState.Peek && _viewModel.HasNotification)
+            return;
+
         _viewModel.Expand();
     }
 
