@@ -168,7 +168,11 @@
                            Visibility="Collapsed" Opacity="0" />
 
                 <!-- Peek: Brief info (media / notification) -->
-                <Grid x:Name="PeekContent" Visibility="Collapsed">
+                <Grid x:Name="PeekContent" Visibility="Collapsed"
+                      Background="Transparent"
+                      MouseLeftButtonUp="OnPeekLeftClick"
+                      MouseRightButtonUp="OnPeekRightClick"
+                      Cursor="Hand">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />

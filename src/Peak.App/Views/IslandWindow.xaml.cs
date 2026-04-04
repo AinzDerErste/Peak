@@ -468,6 +468,25 @@ public partial class IslandWindow : Window
         _viewModel.HasNotification = false;
     }
 
+    private void OnPeekLeftClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_viewModel.HasNotification)
+        {
+            _viewModel.OpenCurrentNotificationApp();
+            _viewModel.DismissCurrentNotification();
+            e.Handled = true;
+        }
+    }
+
+    private void OnPeekRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_viewModel.HasNotification)
+        {
+            _viewModel.DismissCurrentNotification();
+            e.Handled = true;
+        }
+    }
+
     // ─── Edit Mode Toggle ────────────────────────────────────────
 
     private void SetEditModeVisibility(bool isEdit)
