@@ -644,9 +644,13 @@ public partial class IslandWindow : Window
             return; // Hidden state is only toggled via hotkey
 
         // While a notification is being peeked, let the user interact with the Peek
-        // (left-click open, right-click dismiss) instead of auto-expanding.
+        // (left-click open, right-click dismiss) instead of auto-expanding. Pause
+        // the auto-collapse timer while the mouse is over the island.
         if (_viewModel.CurrentState == IslandState.Peek && _viewModel.HasNotification)
+        {
+            _viewModel.PauseAutoCollapse();
             return;
+        }
 
         _viewModel.Expand();
     }
@@ -656,6 +660,11 @@ public partial class IslandWindow : Window
         if (_viewModel.IsEditMode) return;
         if (_viewModel.CurrentState == IslandState.Hidden) return;
         if (_isDragging || _isWidgetDragging) return;
+
+        // Resume auto-collapse if we paused it for an interactive peek
+        if (_viewModel.CurrentState == IslandState.Peek && _viewModel.HasNotification)
+            _viewModel.ResumeAutoCollapse();
+
         StartMousePolling();
     }
 

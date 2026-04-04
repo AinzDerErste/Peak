@@ -566,6 +566,15 @@ public partial class IslandViewModel : ObservableObject
         }
     }
 
+    public void PauseAutoCollapse() => _autoCollapseTimer.Stop();
+
+    public void ResumeAutoCollapse()
+    {
+        _autoCollapseTimer.Stop();
+        _autoCollapseTimer.Interval = TimeSpan.FromSeconds(_settingsManager.Settings.AutoCollapseSeconds);
+        _autoCollapseTimer.Start();
+    }
+
     public void OpenCurrentNotificationApp()
     {
         var aumid = CurrentNotificationAumid;
