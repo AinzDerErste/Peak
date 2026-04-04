@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,6 +19,7 @@ public partial class SettingsWindow : Window
     private string _selectedBgColor = "#FF000000";
     private string _selectedAccentColor = "#FF60CDFF";
     private bool _suppressHexEvent;
+    private readonly ObservableCollection<NotificationAppToggle> _notificationApps = new();
 
     public SettingsWindow(SettingsManager settingsManager)
     {
@@ -60,6 +64,25 @@ public partial class SettingsWindow : Window
         // Audio
         LoadAudioDevices(s.AudioDeviceId);
         SensitivitySlider.Value = s.VisualizerSensitivity;
+
+        // Notification apps
+        LoadNotificationApps(s);
+    }
+
+    private void LoadNotificationApps(AppSettings s)
+    {
+        _notificationApps.Clear();
+        foreach (var app in s.SeenNotificationApps.OrderBy(a => a, StringComparer.OrdinalIgnoreCase))
+        {
+            _notificationApps.Add(new NotificationAppToggle
+            {
+                AppName = app,
+                IsEnabled = !s.MutedNotificationApps.Contains(app)
+            });
+        }
+        NotificationAppsList.ItemsSource = _notificationApps;
+        NoNotificationAppsHint.Visibility = _notificationApps.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static readonly (CollapsedWidget Value, string Label)[] _collapsedOptions =
@@ -151,6 +174,10 @@ public partial class SettingsWindow : Window
         var wantsAutoStart = AutoStartCheck.IsChecked ?? false;
         s.LaunchAtStartup = wantsAutoStart;
         StartupService.SetAutoStart(wantsAutoStart);
+
+        // Notification apps: persist muted set from toggles
+        s.MutedNotificationApps = new HashSet<string>(
+            _notificationApps.Where(a => !a.IsEnabled).Select(a => a.AppName));
 
         _settingsManager.Save();
         Close();
@@ -386,4 +413,21 @@ public partial class SettingsWindow : Window
         if (e.ChangedButton == MouseButton.Left)
             DragMove();
     }
+}
+
+public class NotificationAppToggle : INotifyPropertyChanged
+{
+    private bool _isEnabled;
+    public string AppName { get; set; } = string.Empty;
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set
+        {
+            if (_isEnabled == value) return;
+            _isEnabled = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsEnabled)));
+        }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 }

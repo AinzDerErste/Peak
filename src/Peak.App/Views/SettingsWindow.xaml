@@ -641,6 +641,31 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Notification Apps Mute List -->
+                        <TextBlock Text="NOTIFICATION APPS" Style="{StaticResource SectionHeader}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="Toggle which apps are allowed to show peeks. Only apps that have already sent a notification appear here."
+                                           Style="{StaticResource SubLabel}" FontStyle="Italic" Margin="0,0,0,10"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl x:Name="NotificationAppsList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,4,0,4">
+                                                <TextBlock Text="{Binding AppName}" Style="{StaticResource Label}"
+                                                           DockPanel.Dock="Left" VerticalAlignment="Center" />
+                                                <CheckBox IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                          Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="NoNotificationAppsHint"
+                                           Text="No apps yet — once you receive a notification, it'll show up here."
+                                           Style="{StaticResource SubLabel}" FontStyle="Italic" />
+                            </StackPanel>
+                        </Border>
+
                         <!-- ═══ ABOUT ═══ -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>

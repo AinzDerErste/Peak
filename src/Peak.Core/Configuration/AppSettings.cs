@@ -88,6 +88,10 @@ public class AppSettings
     public double WeatherLon { get; set; } = 13.405;
     public bool LaunchAtStartup { get; set; }
 
+    // Notifications: apps ever seen (for settings UI) and apps muted by the user
+    public List<string> SeenNotificationApps { get; set; } = new();
+    public HashSet<string> MutedNotificationApps { get; set; } = new();
+
     // Collapsed-state slots: Left, Center, Right
     public CollapsedWidget[] CollapsedSlots { get; set; } =
         [CollapsedWidget.None, CollapsedWidget.Clock, CollapsedWidget.Weather];
