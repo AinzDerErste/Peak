@@ -101,10 +101,13 @@ public partial class IslandViewModel : ObservableObject
 
     // Pomodoro
     [ObservableProperty] private string _pomodoroText = "25:00";
-    [ObservableProperty] private string _pomodoroPhaseLabel = "Ready";
+    [ObservableProperty] private string _pomodoroPhaseLabel = "Focus";
     [ObservableProperty] private bool _isPomodoroRunning;
+    [ObservableProperty] private bool _isPomodoroActive; // running OR paused mid-phase
     [ObservableProperty] private int _pomodoroCompletedSessions;
+    [ObservableProperty] private bool _hasPomodoroSessions;
     [ObservableProperty] private double _pomodoroProgress; // 0..1
+    [ObservableProperty] private System.Windows.Media.Color _pomodoroPhaseColor = System.Windows.Media.Color.FromArgb(0x55, 0x60, 0xCD, 0xFF);
 
     // Media progress
     [ObservableProperty] private double _mediaProgress; // 0.0 – 1.0
@@ -268,6 +271,7 @@ public partial class IslandViewModel : ObservableObject
         PomodoroPhaseLabel = PhaseDisplayName(_pomodoroService.Phase);
         IsPomodoroRunning = _pomodoroService.IsRunning;
         PomodoroCompletedSessions = _pomodoroService.CompletedWorkSessions;
+        HasPomodoroSessions = _pomodoroService.CompletedWorkSessions > 0;
 
         var total = _pomodoroService.Phase switch
         {
@@ -279,14 +283,25 @@ public partial class IslandViewModel : ObservableObject
         PomodoroProgress = total.TotalSeconds > 0
             ? 1.0 - r.TotalSeconds / total.TotalSeconds
             : 0;
+
+        // Active = running OR mid-phase pause (progress > 0 and phase not idle)
+        IsPomodoroActive = _pomodoroService.IsRunning || PomodoroProgress > 0.0001;
+
+        PomodoroPhaseColor = _pomodoroService.Phase switch
+        {
+            PomodoroPhase.Work => System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF), // Accent blue
+            PomodoroPhase.ShortBreak => System.Windows.Media.Color.FromArgb(0x66, 0x4A, 0xDE, 0x80), // Green
+            PomodoroPhase.LongBreak => System.Windows.Media.Color.FromArgb(0x66, 0x34, 0xD3, 0x99), // Teal
+            _ => System.Windows.Media.Color.FromArgb(0x00, 0x60, 0xCD, 0xFF)
+        };
     }
 
     private static string PhaseDisplayName(PomodoroPhase phase) => phase switch
     {
         PomodoroPhase.Work => "Focus",
-        PomodoroPhase.ShortBreak => "Short break",
-        PomodoroPhase.LongBreak => "Long break",
-        _ => "Ready"
+        PomodoroPhase.ShortBreak => "Break",
+        PomodoroPhase.LongBreak => "Long Break",
+        _ => "Focus"
     };
 
     public async Task InitializeAsync()
