@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              FontFamily="{StaticResource InterFont}"
              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+             HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
     <UserControl.Background>
         <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
             <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="0" />
