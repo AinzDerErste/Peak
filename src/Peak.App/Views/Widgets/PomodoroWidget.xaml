@@ -1,18 +1,16 @@
 <UserControl x:Class="Peak.App.Views.Widgets.PomodoroWidget"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             FontFamily="{StaticResource InterFont}"
-             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-             HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-    <UserControl.Background>
-        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-            <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="0" />
-            <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="{Binding PomodoroProgress}" />
-            <GradientStop Color="#00000000" Offset="{Binding PomodoroProgress}" />
-            <GradientStop Color="#00000000" Offset="1" />
-        </LinearGradientBrush>
-    </UserControl.Background>
-    <Grid>
+             FontFamily="{StaticResource InterFont}">
+    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="0" />
+                <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="{Binding PomodoroProgress}" />
+                <GradientStop Color="#00000000" Offset="{Binding PomodoroProgress}" />
+                <GradientStop Color="#00000000" Offset="1" />
+            </LinearGradientBrush>
+        </Grid.Background>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Margin="8,0,8,0">
             <!-- Phase label + completed session count -->
