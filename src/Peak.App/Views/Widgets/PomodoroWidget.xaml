@@ -1,7 +1,9 @@
 <UserControl x:Class="Peak.App.Views.Widgets.PomodoroWidget"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             FontFamily="{StaticResource InterFont}">
+             FontFamily="{StaticResource InterFont}"
+             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
     <Border CornerRadius="6" ClipToBounds="True" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
         <Border.Background>
             <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
