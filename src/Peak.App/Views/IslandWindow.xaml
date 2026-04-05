@@ -235,8 +235,8 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" /><ColumnDefinition x:Name="Col1Row0" Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ContentControl x:Name="SlotHost0" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
-                            <ContentControl x:Name="SlotHost1" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost0" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost1" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <Border x:Name="EditOverlay0" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
                                     Visibility="Collapsed" Cursor="Hand" MouseDown="OnEditSlotClick" Tag="0"
                                     AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
@@ -299,8 +299,8 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" /><ColumnDefinition x:Name="Col1Row1" Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ContentControl x:Name="SlotHost2" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
-                            <ContentControl x:Name="SlotHost3" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost2" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost3" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <Border x:Name="EditOverlay2" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
                                     Visibility="Collapsed" Tag="2"
                                     AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
@@ -347,8 +347,8 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" /><ColumnDefinition x:Name="Col1Row2" Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ContentControl x:Name="SlotHost4" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" />
-                            <ContentControl x:Name="SlotHost5" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost4" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                            <ContentControl x:Name="SlotHost5" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <Border x:Name="EditOverlay4" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
                                     Visibility="Collapsed" Tag="4"
                                     AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
