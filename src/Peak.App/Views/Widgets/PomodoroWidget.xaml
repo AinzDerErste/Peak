@@ -11,7 +11,12 @@
                 <GradientStop Color="#00000000" Offset="1" />
             </LinearGradientBrush>
         </Grid.Background>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center"
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center"
                     Margin="8,0,8,0">
             <!-- Phase label + completed session count -->
             <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
