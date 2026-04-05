@@ -241,6 +241,7 @@ public partial class IslandWindow : Window
             WidgetType.Clipboard => new ClipboardWidget { DataContext = _viewModel },
             WidgetType.QuickNotes => new QuickNotesWidget { DataContext = _viewModel },
             WidgetType.VolumeMixer => new VolumeMixerWidget { DataContext = _viewModel },
+            WidgetType.Pomodoro => new PomodoroWidget { DataContext = _viewModel },
             _ => null
         };
 
@@ -536,18 +537,23 @@ public partial class IslandWindow : Window
 
     private const int HOTKEY_ID_TOGGLE = 9001;
     private const int WM_HOTKEY = 0x0312;
-    private const uint MOD_CTRL = 0x0002;
-    private const uint MOD_SHIFT = 0x0004;
-    private const uint VK_N = 0x4E;
 
     private void RegisterGlobalHotkey()
     {
-        RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE, MOD_CTRL | MOD_SHIFT, VK_N);
+        var s = _viewModel.Settings;
+        RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE, s.HotkeyModifiers, s.HotkeyVirtualKey);
     }
 
     private void UnregisterGlobalHotkey()
     {
         UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE);
+    }
+
+    public void ReRegisterGlobalHotkey()
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        UnregisterGlobalHotkey();
+        RegisterGlobalHotkey();
     }
 
     private void HandleHotkeyToggle()

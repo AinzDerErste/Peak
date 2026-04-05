@@ -21,7 +21,8 @@ public enum WidgetType
     QuickAccess,
     Clipboard,
     QuickNotes,
-    VolumeMixer
+    VolumeMixer,
+    Pomodoro
 }
 
 public enum RowMode
@@ -91,6 +92,12 @@ public class AppSettings
     // Notifications: apps ever seen (for settings UI) and apps muted by the user
     public List<string> SeenNotificationApps { get; set; } = new();
     public HashSet<string> MutedNotificationApps { get; set; } = new();
+
+    // Global toggle hotkey (defaults to Ctrl+Shift+N)
+    // Modifiers are Win32 MOD_* flags: ALT=1, CTRL=2, SHIFT=4, WIN=8
+    public uint HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // CTRL + SHIFT
+    public uint HotkeyVirtualKey { get; set; } = 0x4E;            // N
+    public string HotkeyDisplay { get; set; } = "Ctrl+Shift+N";
 
     // Collapsed-state slots: Left, Center, Right
     public CollapsedWidget[] CollapsedSlots { get; set; } =

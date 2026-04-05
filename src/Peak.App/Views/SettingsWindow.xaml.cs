@@ -20,6 +20,9 @@ public partial class SettingsWindow : Window
     private string _selectedAccentColor = "#FF60CDFF";
     private bool _suppressHexEvent;
     private readonly ObservableCollection<NotificationAppToggle> _notificationApps = new();
+    private uint _recordedHotkeyModifiers;
+    private uint _recordedHotkeyVk;
+    private string _recordedHotkeyDisplay = "";
 
     public SettingsWindow(SettingsManager settingsManager)
     {
@@ -37,6 +40,11 @@ public partial class SettingsWindow : Window
         AlwaysVisibleCheck.IsChecked = s.Behavior == IslandBehavior.AlwaysVisible;
         CollapseSlider.Value = s.AutoCollapseSeconds;
         AutoStartCheck.IsChecked = s.LaunchAtStartup;
+
+        _recordedHotkeyModifiers = s.HotkeyModifiers;
+        _recordedHotkeyVk = s.HotkeyVirtualKey;
+        _recordedHotkeyDisplay = s.HotkeyDisplay;
+        HotkeyBox.Text = s.HotkeyDisplay;
         ShowClockCheck.IsChecked = s.ShowClock;
         ShowMediaCheck.IsChecked = s.ShowMedia;
         ShowSystemCheck.IsChecked = s.ShowSystemMonitor;
@@ -174,6 +182,14 @@ public partial class SettingsWindow : Window
         var wantsAutoStart = AutoStartCheck.IsChecked ?? false;
         s.LaunchAtStartup = wantsAutoStart;
         StartupService.SetAutoStart(wantsAutoStart);
+
+        // Hotkey
+        s.HotkeyModifiers = _recordedHotkeyModifiers;
+        s.HotkeyVirtualKey = _recordedHotkeyVk;
+        s.HotkeyDisplay = _recordedHotkeyDisplay;
+        ((App)Application.Current).Services
+            .GetRequiredService<IslandWindow>()
+            .ReRegisterGlobalHotkey();
 
         // Notification apps: persist muted set from toggles
         s.MutedNotificationApps = new HashSet<string>(
@@ -412,6 +428,70 @@ public partial class SettingsWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
             DragMove();
+    }
+
+    // ─── Hotkey capture ──────────────────────────────────────────
+
+    private void OnHotkeyBoxFocused(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        HotkeyBox.Text = "Press a key combination…";
+    }
+
+    private void OnHotkeyBoxBlurred(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        HotkeyBox.Text = _recordedHotkeyDisplay;
+    }
+
+    private void OnHotkeyBoxKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        e.Handled = true;
+
+        var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+
+        // Ignore pure modifier presses — wait for a real key
+        if (key is System.Windows.Input.Key.LeftCtrl or System.Windows.Input.Key.RightCtrl
+                 or System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift
+                 or System.Windows.Input.Key.LeftAlt or System.Windows.Input.Key.RightAlt
+                 or System.Windows.Input.Key.LWin or System.Windows.Input.Key.RWin
+                 or System.Windows.Input.Key.Escape
+                 or System.Windows.Input.Key.Tab
+                 or System.Windows.Input.Key.System)
+            return;
+
+        var mods = System.Windows.Input.Keyboard.Modifiers;
+        uint winMods = 0;
+        if ((mods & System.Windows.Input.ModifierKeys.Alt) != 0) winMods |= 0x0001;
+        if ((mods & System.Windows.Input.ModifierKeys.Control) != 0) winMods |= 0x0002;
+        if ((mods & System.Windows.Input.ModifierKeys.Shift) != 0) winMods |= 0x0004;
+        if ((mods & System.Windows.Input.ModifierKeys.Windows) != 0) winMods |= 0x0008;
+
+        if (winMods == 0)
+        {
+            HotkeyBox.Text = "Need at least one modifier";
+            return;
+        }
+
+        var vk = (uint)System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
+
+        var parts = new List<string>();
+        if ((winMods & 0x0002) != 0) parts.Add("Ctrl");
+        if ((winMods & 0x0004) != 0) parts.Add("Shift");
+        if ((winMods & 0x0001) != 0) parts.Add("Alt");
+        if ((winMods & 0x0008) != 0) parts.Add("Win");
+        parts.Add(key.ToString());
+
+        _recordedHotkeyModifiers = winMods;
+        _recordedHotkeyVk = vk;
+        _recordedHotkeyDisplay = string.Join("+", parts);
+        HotkeyBox.Text = _recordedHotkeyDisplay;
+    }
+
+    private void OnHotkeyResetClick(object sender, RoutedEventArgs e)
+    {
+        _recordedHotkeyModifiers = 0x0002 | 0x0004; // Ctrl + Shift
+        _recordedHotkeyVk = 0x4E;                    // N
+        _recordedHotkeyDisplay = "Ctrl+Shift+N";
+        HotkeyBox.Text = _recordedHotkeyDisplay;
     }
 }
 

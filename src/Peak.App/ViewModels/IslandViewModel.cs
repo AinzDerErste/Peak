@@ -29,11 +29,14 @@ public partial class IslandViewModel : ObservableObject
     private readonly WeatherService _weatherService;
     private readonly CalendarService _calendarService;
     private readonly TimerService _timerService;
+    private readonly PomodoroService _pomodoroService;
     private readonly UpdateService _updateService;
     private readonly ClipboardService _clipboardService;
     private readonly NotesService _notesService;
     private readonly VolumeMixerService _volumeMixerService;
     private readonly SettingsManager _settingsManager;
+    public SettingsManager SettingsManager => _settingsManager;
+    public AppSettings Settings => _settingsManager.Settings;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _autoCollapseTimer;
     private readonly DispatcherTimer _weatherTimer;
@@ -96,6 +99,13 @@ public partial class IslandViewModel : ObservableObject
     [ObservableProperty] private bool _isTimerRunning;
     [ObservableProperty] private int _timerMinutes = 5;
 
+    // Pomodoro
+    [ObservableProperty] private string _pomodoroText = "25:00";
+    [ObservableProperty] private string _pomodoroPhaseLabel = "Ready";
+    [ObservableProperty] private bool _isPomodoroRunning;
+    [ObservableProperty] private int _pomodoroCompletedSessions;
+    [ObservableProperty] private double _pomodoroProgress; // 0..1
+
     // Media progress
     [ObservableProperty] private double _mediaProgress; // 0.0 – 1.0
     [ObservableProperty] private string _mediaPositionText = string.Empty; // e.g. "1:23 / 3:45"
@@ -146,8 +156,6 @@ public partial class IslandViewModel : ObservableObject
     // Edit mode
     [ObservableProperty] private bool _isEditMode;
 
-    public AppSettings Settings => _settingsManager.Settings;
-
     public static WidgetType[] AvailableWidgets { get; } =
         Enum.GetValues<WidgetType>();
 
@@ -159,6 +167,7 @@ public partial class IslandViewModel : ObservableObject
         WeatherService weatherService,
         CalendarService calendarService,
         TimerService timerService,
+        PomodoroService pomodoroService,
         UpdateService updateService,
         ClipboardService clipboardService,
         NotesService notesService,
@@ -172,6 +181,7 @@ public partial class IslandViewModel : ObservableObject
         _weatherService = weatherService;
         _calendarService = calendarService;
         _timerService = timerService;
+        _pomodoroService = pomodoroService;
         _updateService = updateService;
         _clipboardService = clipboardService;
         _notesService = notesService;
@@ -232,7 +242,52 @@ public partial class IslandViewModel : ObservableObject
             IsTimerRunning = false;
             ShowPeek();
         });
+
+        _pomodoroService.Tick += () => _dispatcher.Invoke(UpdatePomodoroBindings);
+        _pomodoroService.PhaseChanged += _ => _dispatcher.Invoke(UpdatePomodoroBindings);
+        _pomodoroService.PhaseFinished += phase => _dispatcher.Invoke(() =>
+        {
+            var next = phase == PomodoroPhase.Work
+                ? (_pomodoroService.CompletedWorkSessions % _pomodoroService.LongBreakEvery == 0
+                    ? "Long break" : "Short break")
+                : "Focus time";
+            NotificationApp = "Pomodoro";
+            NotificationTitle = $"{PhaseDisplayName(phase)} finished";
+            NotificationBody = $"Next: {next}";
+            NotificationIcon = null;
+            HasNotification = true;
+            ShowPeek();
+        });
     }
+
+    private void UpdatePomodoroBindings()
+    {
+        var r = _pomodoroService.Remaining;
+        if (r < TimeSpan.Zero) r = TimeSpan.Zero;
+        PomodoroText = $"{(int)r.TotalMinutes:D2}:{r.Seconds:D2}";
+        PomodoroPhaseLabel = PhaseDisplayName(_pomodoroService.Phase);
+        IsPomodoroRunning = _pomodoroService.IsRunning;
+        PomodoroCompletedSessions = _pomodoroService.CompletedWorkSessions;
+
+        var total = _pomodoroService.Phase switch
+        {
+            PomodoroPhase.Work => _pomodoroService.WorkDuration,
+            PomodoroPhase.ShortBreak => _pomodoroService.ShortBreakDuration,
+            PomodoroPhase.LongBreak => _pomodoroService.LongBreakDuration,
+            _ => _pomodoroService.WorkDuration
+        };
+        PomodoroProgress = total.TotalSeconds > 0
+            ? 1.0 - r.TotalSeconds / total.TotalSeconds
+            : 0;
+    }
+
+    private static string PhaseDisplayName(PomodoroPhase phase) => phase switch
+    {
+        PomodoroPhase.Work => "Focus",
+        PomodoroPhase.ShortBreak => "Short break",
+        PomodoroPhase.LongBreak => "Long break",
+        _ => "Ready"
+    };
 
     public async Task InitializeAsync()
     {
@@ -707,6 +762,18 @@ public partial class IslandViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void StartPomodoro() => _pomodoroService.Start();
+
+    [RelayCommand]
+    private void PausePomodoro() => _pomodoroService.Pause();
+
+    [RelayCommand]
+    private void SkipPomodoro() => _pomodoroService.Skip();
+
+    [RelayCommand]
+    private void ResetPomodoro() => _pomodoroService.Reset();
+
+    [RelayCommand]
     private void InstallUpdate()
     {
         _updateService.InstallUpdate();
@@ -905,6 +972,7 @@ public partial class IslandViewModel : ObservableObject
         _volumeMixerTimer?.Stop();
         _volumeMixerService.Dispose();
         _timerService.Dispose();
+        _pomodoroService.Dispose();
         _updateService.Stop();
     }
 }
