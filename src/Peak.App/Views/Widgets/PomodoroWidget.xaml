@@ -4,7 +4,8 @@
              FontFamily="{StaticResource InterFont}"
              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
-    <Border CornerRadius="6" ClipToBounds="True" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+    <Border CornerRadius="6" ClipToBounds="True" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+            Margin="0,-4,0,-4">
         <Border.Background>
             <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
                 <GradientStop Color="{Binding PomodoroPhaseColor}" Offset="0" />
