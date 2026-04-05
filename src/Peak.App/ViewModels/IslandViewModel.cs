@@ -287,14 +287,25 @@ public partial class IslandViewModel : ObservableObject
         // Active = running OR mid-phase pause (progress > 0 and phase not idle)
         IsPomodoroActive = _pomodoroService.IsRunning || PomodoroProgress > 0.0001;
 
+        var accent = GetAccentColor();
         PomodoroPhaseColor = _pomodoroService.Phase switch
         {
-            PomodoroPhase.Work => System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF), // Accent blue
-            PomodoroPhase.ShortBreak => System.Windows.Media.Color.FromArgb(0x66, 0x4A, 0xDE, 0x80), // Green
-            PomodoroPhase.LongBreak => System.Windows.Media.Color.FromArgb(0x66, 0x34, 0xD3, 0x99), // Teal
-            _ => System.Windows.Media.Color.FromArgb(0x00, 0x60, 0xCD, 0xFF)
+            PomodoroPhase.Work => WithAlpha(accent, 0x66),
+            PomodoroPhase.ShortBreak => System.Windows.Media.Color.FromArgb(0x66, 0x4A, 0xDE, 0x80),
+            PomodoroPhase.LongBreak => System.Windows.Media.Color.FromArgb(0x66, 0x34, 0xD3, 0x99),
+            _ => WithAlpha(accent, 0x00)
         };
     }
+
+    private static System.Windows.Media.Color GetAccentColor()
+    {
+        if (System.Windows.Application.Current?.Resources["AccentBrush"] is System.Windows.Media.SolidColorBrush brush)
+            return brush.Color;
+        return System.Windows.Media.Color.FromRgb(0x60, 0xCD, 0xFF);
+    }
+
+    private static System.Windows.Media.Color WithAlpha(System.Windows.Media.Color c, byte a)
+        => System.Windows.Media.Color.FromArgb(a, c.R, c.G, c.B);
 
     private static string PhaseDisplayName(PomodoroPhase phase) => phase switch
     {
