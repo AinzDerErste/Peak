@@ -32,8 +32,11 @@ jobs:
           $content = $content -replace '<Version>.*?</Version>', "<Version>${{ steps.version.outputs.VERSION }}</Version>"
           Set-Content $file $content
 
-      - name: Publish
+      - name: Publish App
         run: dotnet publish src/Peak.App/Peak.App.csproj -c Release
+
+      - name: Build Discord Plugin
+        run: dotnet build src/Peak.Plugins.Discord/Peak.Plugins.Discord.csproj -c Release
 
       - name: Install Inno Setup
         shell: pwsh

@@ -8,6 +8,7 @@
 #define MyAppURL "https://github.com/AinzDerErste/Peak"
 
 #define PublishDir "..\src\Peak.App\bin\Release\net8.0-windows10.0.22621.0\publish"
+#define DiscordPluginDir "..\src\Peak.Plugins.Discord\bin\Release\net8.0-windows10.0.22621.0"
 #define IconFile "..\src\Peak.App\Assets\app-icon.ico"
 
 [Setup]
@@ -37,9 +38,13 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "Start Peak with Windows"; GroupDescription: "Additional options:"
+Name: "discord"; Description: "Install Discord plugin (voice call integration)"; GroupDescription: "Plugins:"; Flags: checked
 
 [Files]
+; Main application
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Discord plugin → %APPDATA%\Peak\plugins\discord\
+Source: "{#DiscordPluginDir}\Peak.Plugins.Discord.dll"; DestDir: "{userappdata}\Peak\plugins\discord"; Flags: ignoreversion; Tasks: discord
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -57,6 +62,7 @@ Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; Ru
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{userappdata}\Peak\plugins\discord"
 
 [Code]
 function IsDotNet8Installed(): Boolean;
