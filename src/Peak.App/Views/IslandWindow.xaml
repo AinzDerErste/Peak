@@ -224,7 +224,7 @@
                 <StackPanel x:Name="ExpandedContent" Visibility="Collapsed">
 
                     <!-- Row 0 -->
-                    <DockPanel x:Name="WidgetRow0" Height="85">
+                    <DockPanel x:Name="WidgetRow0" Height="60">
                         <Border x:Name="RowToggle0" DockPanel.Dock="Left" Width="18" Margin="0,0,4,0"
                                 Visibility="Collapsed" Cursor="Hand" MouseDown="OnRowToggleClick" Tag="0"
                                 ToolTip="Toggle wide/split">
@@ -288,7 +288,7 @@
                     <Border x:Name="Separator01" Height="1" Background="#22FFFFFF" Margin="0,8" />
 
                     <!-- Row 1 -->
-                    <DockPanel x:Name="WidgetRow1" Height="85">
+                    <DockPanel x:Name="WidgetRow1" Height="60">
                         <Border x:Name="RowToggle1" DockPanel.Dock="Left" Width="18" Margin="0,0,4,0"
                                 Visibility="Collapsed" Cursor="Hand" MouseDown="OnRowToggleClick" Tag="1"
                                 ToolTip="Toggle wide/split">
@@ -336,7 +336,7 @@
                     <Border x:Name="Separator12" Height="1" Background="#22FFFFFF" Margin="0,8" />
 
                     <!-- Row 2 -->
-                    <DockPanel x:Name="WidgetRow2" Height="85">
+                    <DockPanel x:Name="WidgetRow2" Height="60">
                         <Border x:Name="RowToggle2" DockPanel.Dock="Left" Width="18" Margin="0,0,4,0"
                                 Visibility="Collapsed" Cursor="Hand" MouseDown="OnRowToggleClick" Tag="2"
                                 ToolTip="Toggle wide/split">

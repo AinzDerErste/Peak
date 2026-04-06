@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Peak.Plugins.Discord</AssemblyName>
+    <RootNamespace>Peak.Plugins.Discord</RootNamespace>
+    <!-- Copy plugin DLL to %APPDATA%\Peak\plugins\discord\ after build -->
+    <PluginOutputDir>$(AppData)\Peak\plugins\discord\</PluginOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Plugin references only the SDK; the SDK's types are loaded from the host at runtime
+         so we set Private=false to avoid shipping a second copy of Peak.Plugin.Sdk.dll -->
+    <ProjectReference Include="..\Peak.Plugin.Sdk\Peak.Plugin.Sdk.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Target Name="CopyToPluginsDir" AfterTargets="Build">
+    <MakeDir Directories="$(PluginOutputDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

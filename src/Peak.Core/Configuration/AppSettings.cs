@@ -31,6 +31,12 @@ public enum RowMode
     Wide
 }
 
+public enum NetworkGraphStyle
+{
+    Line,
+    Bars
+}
+
 public enum CollapsedWidget
 {
     None,
@@ -39,7 +45,8 @@ public enum CollapsedWidget
     Temperature,   // Temperature only
     WeatherIcon,   // Icon only
     Date,
-    MediaTitle
+    MediaTitle,
+    DiscordCallCount
 }
 
 public class AppSettings
@@ -103,12 +110,19 @@ public class AppSettings
     public CollapsedWidget[] CollapsedSlots { get; set; } =
         [CollapsedWidget.None, CollapsedWidget.Clock, CollapsedWidget.Weather];
 
+    // Network widget graph style
+    public NetworkGraphStyle NetworkGraphStyle { get; set; } = NetworkGraphStyle.Line;
+
     // Audio visualizer
     public string AudioDeviceId { get; set; } = "";
     public double VisualizerSensitivity { get; set; } = 50; // 0-100, maps to amplification factor
 
     // Plugin settings (key = plugin ID)
     public Dictionary<string, JsonElement> PluginSettings { get; set; } = new();
+
+    // Plugins the user has explicitly disabled (by plugin ID).
+    // Default = empty → all discovered plugins are loaded.
+    public HashSet<string> DisabledPlugins { get; set; } = new();
 
     // String-based slot IDs for plugin widget support
     // When non-empty, takes precedence over WidgetSlots (enum-based)

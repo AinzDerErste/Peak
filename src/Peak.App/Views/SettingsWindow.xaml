@@ -333,6 +333,64 @@
             <Setter Property="Background" Value="#FF333333" />
             <Setter Property="Margin" Value="-16,10,-16,10" />
         </Style>
+
+        <!-- Modern TabControl -->
+        <Style x:Key="ModernTabControl" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <!-- Tab header strip -->
+                            <Border Grid.Row="0" Background="{StaticResource CardBrush}" CornerRadius="8"
+                                    Margin="0,0,0,6" Padding="4">
+                                <TabPanel IsItemsHost="True" HorizontalAlignment="Stretch" />
+                            </Border>
+                            <!-- Tab content -->
+                            <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern TabItem -->
+        <Style x:Key="ModernTabItem" TargetType="TabItem">
+            <Setter Property="FontFamily" Value="{StaticResource SegoeVar}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                                Padding="16,7" Margin="2,0">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="#FF000000" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsSelected" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Window border with shadow simulation -->
@@ -376,7 +434,11 @@
                 </Grid>
 
                 <!-- ═══ CONTENT ═══ -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Margin="24,4,24,0">
+                <TabControl Grid.Row="1" Style="{StaticResource ModernTabControl}" Margin="24,4,24,0">
+
+                    <!-- ════════════ TAB: ALLGEMEIN ════════════ -->
+                    <TabItem Header="General" Style="{StaticResource ModernTabItem}">
+                    <ScrollViewer VerticalScrollBarVisibility="Hidden">
                     <StackPanel>
 
                         <!-- General -->
@@ -643,6 +705,21 @@
                                     <TextBlock Text="Timer" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
                                     <CheckBox x:Name="ShowTimerCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
                                 </DockPanel>
+                                <Border Style="{StaticResource CardSep}" />
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="Network graph style" Style="{StaticResource Label}" />
+                                        <TextBlock Text="How download/upload history is visualised" Style="{StaticResource SubLabel}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <RadioButton x:Name="NetGraphLineRadio" Content="Line" GroupName="NetGraph"
+                                                     Foreground="White" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                     Checked="OnNetGraphStyleChanged" />
+                                        <RadioButton x:Name="NetGraphBarsRadio" Content="Bars" GroupName="NetGraph"
+                                                     Foreground="White" VerticalAlignment="Center"
+                                                     Checked="OnNetGraphStyleChanged" />
+                                    </StackPanel>
+                                </DockPanel>
                             </StackPanel>
                         </Border>
 
@@ -714,7 +791,31 @@
                         <!-- Bottom spacing -->
                         <Border Height="8" />
                     </StackPanel>
-                </ScrollViewer>
+                    </ScrollViewer>
+                    </TabItem>
+
+                    <!-- ════════════ TAB: PLUGINS ════════════ -->
+                    <TabItem Header="Plugins" Style="{StaticResource ModernTabItem}">
+                    <ScrollViewer VerticalScrollBarVisibility="Hidden">
+                    <StackPanel>
+                        <TextBlock Text="Installed plugins can be enabled or disabled here. Changes take effect after reload."
+                                   Style="{StaticResource SubLabel}" FontStyle="Italic" TextWrapping="Wrap"
+                                   Margin="0,6,0,12" />
+
+                        <!-- Dynamically populated plugin cards (toggle + inline settings) -->
+                        <StackPanel x:Name="PluginList" />
+
+                        <!-- Hidden containers kept for code-behind compatibility -->
+                        <Border x:Name="PluginsCard" Visibility="Collapsed">
+                            <StackPanel x:Name="PluginsHost" />
+                        </Border>
+
+                        <Border Height="8" />
+                    </StackPanel>
+                    </ScrollViewer>
+                    </TabItem>
+
+                </TabControl>
 
                 <!-- ═══ FOOTER BUTTONS ═══ -->
                 <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0.5,0,0"

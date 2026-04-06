@@ -25,7 +25,10 @@ public class PluginLoader : IDisposable
     /// Scan the plugins directory and load all plugin assemblies.
     /// Returns discovered IWidgetPlugin instances.
     /// </summary>
-    public IReadOnlyList<LoadedPlugin> LoadAll(IServiceProvider services, Dictionary<string, JsonElement>? savedSettings = null)
+    public IReadOnlyList<LoadedPlugin> LoadAll(
+        IServiceProvider services,
+        Dictionary<string, JsonElement>? savedSettings = null,
+        HashSet<string>? disabledPlugins = null)
     {
         var plugins = new List<LoadedPlugin>();
 
@@ -39,6 +42,9 @@ public class PluginLoader : IDisposable
                 foreach (var dll in dlls)
                 {
                     var loaded = LoadAssembly(dll, services, savedSettings);
+                    // Filter out explicitly disabled plugins
+                    if (disabledPlugins is { Count: > 0 })
+                        loaded.RemoveAll(p => disabledPlugins.Contains(p.Id));
                     plugins.AddRange(loaded);
                 }
             }
@@ -50,6 +56,55 @@ public class PluginLoader : IDisposable
 
         LoadedPlugins = plugins.AsReadOnly();
         return LoadedPlugins;
+    }
+
+    /// <summary>
+    /// Scans all plugin directories and returns discovered plugin IDs and names
+    /// without fully initializing them. Used by the settings UI to show all
+    /// plugins (including disabled ones) with enable/disable toggles.
+    /// </summary>
+    public IReadOnlyList<(string Id, string Name)> DiscoverAll()
+    {
+        var result = new List<(string Id, string Name)>();
+        if (!Directory.Exists(_pluginsDir)) return result;
+
+        foreach (var pluginDir in Directory.GetDirectories(_pluginsDir))
+        {
+            try
+            {
+                var dlls = Directory.GetFiles(pluginDir, "*.dll");
+                foreach (var dll in dlls)
+                {
+                    try
+                    {
+                        var ctx = new PluginLoadContext(dll);
+                        var asm = ctx.LoadFromAssemblyPath(dll);
+                        var pluginTypes = asm.GetTypes()
+                            .Where(t => !t.IsAbstract && !t.IsInterface &&
+                                        t.GetInterfaces().Any(i => i.FullName == "Peak.Plugin.Sdk.IWidgetPlugin"));
+
+                        foreach (var type in pluginTypes)
+                        {
+                            try
+                            {
+                                var instance = Activator.CreateInstance(type);
+                                if (instance == null) continue;
+                                var id = type.GetProperty("Id")?.GetValue(instance) as string ?? type.FullName ?? type.Name;
+                                var name = type.GetProperty("Name")?.GetValue(instance) as string ?? type.Name;
+                                result.Add((id, name));
+                            }
+                            catch { }
+                        }
+
+                        ctx.Unload();
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        return result;
     }
 
     private List<LoadedPlugin> LoadAssembly(string dllPath, IServiceProvider services, Dictionary<string, JsonElement>? savedSettings)
@@ -114,6 +169,137 @@ public class PluginLoader : IDisposable
         return results;
     }
 
+    /// <summary>
+    /// Calls <c>AttachToIsland(host)</c> on every loaded plugin that implements
+    /// <c>Peak.Plugin.Sdk.IIslandIntegrationPlugin</c>. Uses reflection so core
+    /// does not need to reference the plugin SDK types directly.
+    /// </summary>
+    public void AttachIslandIntegrations(object host)
+    {
+        foreach (var plugin in LoadedPlugins)
+        {
+            try
+            {
+                var type = plugin.Instance.GetType();
+                var iface = type.GetInterfaces()
+                    .FirstOrDefault(i => i.FullName == "Peak.Plugin.Sdk.IIslandIntegrationPlugin");
+                if (iface == null) continue;
+
+                var attach = iface.GetMethod("AttachToIsland");
+                attach?.Invoke(plugin.Instance, [host]);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"AttachToIsland failed for {plugin.Id}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the editable settings schema for every plugin that implements
+    /// <c>Peak.Plugin.Sdk.IPluginSettingsProvider</c>.
+    /// </summary>
+    public IReadOnlyList<PluginSettingsInfo> GetPluginSettingsSchemas()
+    {
+        var list = new List<PluginSettingsInfo>();
+        foreach (var plugin in LoadedPlugins)
+        {
+            try
+            {
+                var type = plugin.Instance.GetType();
+                var iface = type.GetInterfaces()
+                    .FirstOrDefault(i => i.FullName == "Peak.Plugin.Sdk.IPluginSettingsProvider");
+                if (iface == null) continue;
+
+                var getSchema = iface.GetMethod("GetSettingsSchema");
+                var raw = getSchema?.Invoke(plugin.Instance, null) as System.Collections.IEnumerable;
+                if (raw == null) continue;
+
+                var fields = new List<PluginSettingFieldDto>();
+                foreach (var f in raw)
+                {
+                    var ft = f.GetType();
+                    string GetStr(string prop) => ft.GetProperty(prop)?.GetValue(f) as string ?? "";
+                    string? GetStrN(string prop) => ft.GetProperty(prop)?.GetValue(f) as string;
+                    int GetInt(string prop) => Convert.ToInt32(ft.GetProperty(prop)?.GetValue(f) ?? 0);
+                    fields.Add(new PluginSettingFieldDto(
+                        Key: GetStr("Key"),
+                        Label: GetStr("Label"),
+                        Description: GetStrN("Description"),
+                        Kind: GetInt("Kind"),
+                        CurrentValue: GetStrN("CurrentValue"),
+                        Placeholder: GetStrN("Placeholder")
+                    ));
+                }
+                list.Add(new PluginSettingsInfo(plugin.Id, plugin.Name, fields));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetSettingsSchema failed for {plugin.Id}: {ex.Message}");
+            }
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Applies a single field value to a plugin's settings provider.
+    /// </summary>
+    public void SetPluginSetting(string pluginId, string key, string? value)
+    {
+        var plugin = LoadedPlugins.FirstOrDefault(p => p.Id == pluginId);
+        if (plugin == null) return;
+
+        var type = plugin.Instance.GetType();
+        var iface = type.GetInterfaces()
+            .FirstOrDefault(i => i.FullName == "Peak.Plugin.Sdk.IPluginSettingsProvider");
+        var setter = iface?.GetMethod("SetSettingValue");
+        setter?.Invoke(plugin.Instance, [key, value]);
+    }
+
+    /// <summary>
+    /// Calls <c>SaveSettings()</c> on every plugin and returns the combined
+    /// dictionary keyed by plugin ID (intended to be assigned to
+    /// <c>AppSettings.PluginSettings</c>).
+    /// </summary>
+    public Dictionary<string, JsonElement> CollectAllSettings()
+    {
+        var result = new Dictionary<string, JsonElement>();
+        foreach (var plugin in LoadedPlugins)
+        {
+            try
+            {
+                var el = plugin.SaveSettings();
+                if (el.HasValue) result[plugin.Id] = el.Value;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"CollectAllSettings: {plugin.Id}: {ex.Message}");
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Calls <c>DetachFromIsland()</c> on every island-integration plugin.
+    /// </summary>
+    public void DetachIslandIntegrations()
+    {
+        foreach (var plugin in LoadedPlugins)
+        {
+            try
+            {
+                var type = plugin.Instance.GetType();
+                var iface = type.GetInterfaces()
+                    .FirstOrDefault(i => i.FullName == "Peak.Plugin.Sdk.IIslandIntegrationPlugin");
+                if (iface == null) continue;
+
+                var detach = iface.GetMethod("DetachFromIsland");
+                detach?.Invoke(plugin.Instance, []);
+            }
+            catch { }
+        }
+    }
+
     public void Dispose()
     {
         foreach (var ctx in _contexts)
@@ -125,6 +311,21 @@ public class PluginLoader : IDisposable
 
     private record PluginContext(AssemblyLoadContext Context, string DllPath);
 }
+
+public record PluginSettingsInfo(
+    string PluginId,
+    string PluginName,
+    IReadOnlyList<PluginSettingFieldDto> Fields
+);
+
+public record PluginSettingFieldDto(
+    string Key,
+    string Label,
+    string? Description,
+    int Kind,          // 0=Text, 1=Password, 2=Bool, 3=Number (mirrors PluginSettingFieldKind)
+    string? CurrentValue,
+    string? Placeholder
+);
 
 public record LoadedPlugin(
     string Id,

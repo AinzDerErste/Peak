@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Peak.Core\Peak.Core.csproj" />
     <ProjectReference Include="..\Peak.Platform\Peak.Platform.csproj" />
+    <ProjectReference Include="..\Peak.Plugin.Sdk\Peak.Plugin.Sdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>

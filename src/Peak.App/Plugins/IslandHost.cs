@@ -1,0 +1,113 @@
+using System.Reflection;
+using System.Windows;
+using System.Windows.Threading;
+using Peak.App.ViewModels;
+using Peak.App.Views;
+using Peak.Core.Configuration;
+using Peak.Core.Plugins;
+using Peak.Core.Services;
+using Peak.Plugin.Sdk;
+
+namespace Peak.App.Plugins;
+
+/// <summary>
+/// Host implementation exposed to plugins. Routes calls to the active
+/// <see cref="IslandWindow"/> and <see cref="IslandViewModel"/>.
+/// </summary>
+public class IslandHost : IIslandHost
+{
+    private readonly IslandViewModel _viewModel;
+    private readonly SettingsManager _settingsManager;
+    private IslandWindow? _window;
+
+    public IslandHost(IslandViewModel viewModel, SettingsManager settingsManager)
+    {
+        _viewModel = viewModel;
+        _settingsManager = settingsManager;
+    }
+
+    /// <summary>Set by App.xaml.cs after plugin loading.</summary>
+    public PluginLoader? PluginLoader { get; set; }
+
+    /// <summary>Called by App.xaml.cs once the island window exists.</summary>
+    public void AttachWindow(IslandWindow window) => _window = window;
+
+    public object ViewModel => _viewModel;
+
+    public Dispatcher UiDispatcher => Application.Current.Dispatcher;
+
+    public void SetVisualizerOverride(UIElement? content)
+    {
+        if (_window == null) return;
+        UiDispatcher.Invoke(() => _window.SetVisualizerOverride(content));
+    }
+
+    public void SetCollapsedRenderer(Func<CollapsedWidgetKind, FrameworkElement?>? renderer)
+    {
+        if (_window == null) return;
+
+        UiDispatcher.Invoke(() =>
+        {
+            if (renderer == null)
+            {
+                _window.ExternalCollapsedRenderer = null;
+            }
+            else
+            {
+                _window.ExternalCollapsedRenderer = w =>
+                {
+                    var kind = (CollapsedWidgetKind)(int)w;
+                    return renderer(kind);
+                };
+            }
+            _window.RenderCollapsedSlots();
+        });
+    }
+
+    public void RefreshCollapsedSlots()
+    {
+        if (_window == null) return;
+        UiDispatcher.Invoke(() => _window.RenderCollapsedSlots());
+    }
+
+    public void RequestSettingsSave()
+    {
+        try
+        {
+            var loader = PluginLoader;
+            if (loader != null)
+            {
+                var all = loader.CollectAllSettings();
+                _settingsManager.Settings.PluginSettings = all;
+            }
+            _settingsManager.Save();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"RequestSettingsSave failed: {ex.Message}");
+        }
+    }
+
+    public void SetViewModelProperty(string propertyName, object? value)
+    {
+        UiDispatcher.Invoke(() =>
+        {
+            var prop = typeof(IslandViewModel).GetProperty(
+                propertyName,
+                BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null || !prop.CanWrite) return;
+
+            try
+            {
+                var converted = value != null && !prop.PropertyType.IsInstanceOfType(value)
+                    ? Convert.ChangeType(value, prop.PropertyType)
+                    : value;
+                prop.SetValue(_viewModel, converted);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SetViewModelProperty({propertyName}) failed: {ex.Message}");
+            }
+        });
+    }
+}

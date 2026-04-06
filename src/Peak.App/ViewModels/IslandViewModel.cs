@@ -71,6 +71,10 @@ public partial class IslandViewModel : ObservableObject
     [ObservableProperty] private string _weatherCity = string.Empty;
     [ObservableProperty] private Geometry? _weatherIconGeometry;
 
+    // Discord (set by plugin)
+    [ObservableProperty] private int _discordCallCount;
+    [ObservableProperty] private string _discordCallCountDisplay = "—";
+
     // SVG Icon helpers
     public Geometry? PlayPauseIcon => IsPlaying
         ? (Geometry?)Application.Current?.TryFindResource("IconPause")

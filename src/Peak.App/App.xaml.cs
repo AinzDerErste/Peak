@@ -22,6 +22,7 @@ public partial class App : Application
     private PluginLoader? _pluginLoader;
 
     public IServiceProvider Services => _host!.Services;
+    public PluginLoader? PluginLoader => _pluginLoader;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -37,6 +38,18 @@ public partial class App : Application
         // Prevent auto-shutdown before window is shown
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Setup tray icon once — survives reloads
+        SetupTrayIcon();
+
+        await InitializeAppAsync();
+    }
+
+    /// <summary>
+    /// Build the DI host, load settings + plugins, and show the island window.
+    /// Safe to call again after <see cref="TeardownForReload"/>.
+    /// </summary>
+    private async Task InitializeAppAsync()
+    {
         try
         {
             _host = Host.CreateDefaultBuilder()
@@ -58,6 +71,7 @@ public partial class App : Application
                     services.AddSingleton<WidgetRegistry>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();
+                    services.AddSingleton<Plugins.IslandHost>();
                     services.AddSingleton<UpdateService>();
                     services.AddHttpClient("Weather");
                     services.AddHttpClient("Update");
@@ -76,9 +90,6 @@ public partial class App : Application
             RegisterBuiltInWidgets(registry);
             LoadPlugins(registry, settingsManager, _host.Services);
 
-            // Setup tray icon
-            SetupTrayIcon();
-
             // Initialize services (load slot layout before window shows)
             var viewModel = _host.Services.GetRequiredService<IslandViewModel>();
             await viewModel.InitializeAsync();
@@ -90,11 +101,67 @@ public partial class App : Application
             // Show island (slots are already loaded from settings)
             _islandWindow = _host.Services.GetRequiredService<IslandWindow>();
             _islandWindow.Show();
+
+            // Wire plugin island-host and let integration plugins attach
+            var islandHost = _host.Services.GetRequiredService<Plugins.IslandHost>();
+            islandHost.AttachWindow(_islandWindow);
+            islandHost.PluginLoader = _pluginLoader;
+            _pluginLoader?.AttachIslandIntegrations(islandHost);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Startup failed:\n{ex}", "Peak Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
+        }
+    }
+
+    /// <summary>
+    /// Dispose host, plugins and window so <see cref="InitializeAppAsync"/> can
+    /// build a fresh instance. Keeps the tray icon and the process alive.
+    /// </summary>
+    private void TeardownForReload()
+    {
+        try
+        {
+            var viewModel = _host?.Services.GetService<IslandViewModel>();
+            viewModel?.Cleanup();
+        }
+        catch { }
+
+        try { _pluginLoader?.DetachIslandIntegrations(); } catch { }
+        try { _pluginLoader?.Dispose(); } catch { }
+        _pluginLoader = null;
+
+        try
+        {
+            if (_islandWindow != null)
+            {
+                _islandWindow.Close();
+                _islandWindow = null;
+            }
+        }
+        catch { }
+
+        try { _host?.Dispose(); } catch { }
+        _host = null;
+    }
+
+    /// <summary>
+    /// Reload in-process: tear down all services and rebuild them.
+    /// Much faster than a full process restart.
+    /// </summary>
+    private async void ReloadApplication()
+    {
+        try
+        {
+            TeardownForReload();
+            // Give finalizers / native handles a tick to release.
+            await Task.Delay(200);
+            await InitializeAppAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Reload failed:\n{ex}", "Peak", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -141,6 +208,14 @@ public partial class App : Application
         contextMenu.Items.Add(toggleItem);
 
         contextMenu.Items.Add(new System.Windows.Controls.Separator { Style = sepStyle });
+
+        var reloadItem = new System.Windows.Controls.MenuItem { Header = "Reload", Style = menuStyle, Icon = MakeMenuIcon("IconArrowsRotate") };
+        reloadItem.Click += (_, _) => ReloadApplication();
+        contextMenu.Items.Add(reloadItem);
+
+        var restartItem = new System.Windows.Controls.MenuItem { Header = "Restart", Style = menuStyle, Icon = MakeMenuIcon("IconArrowsRotate") };
+        restartItem.Click += (_, _) => RestartApplication();
+        contextMenu.Items.Add(restartItem);
 
         var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit", Style = menuStyle, Icon = MakeMenuIcon("IconXmark") };
         exitItem.Click += (_, _) => ExitApplication();
@@ -250,7 +325,7 @@ public partial class App : Application
 
         try
         {
-            var plugins = _pluginLoader.LoadAll(services, settingsManager.Settings.PluginSettings);
+            var plugins = _pluginLoader.LoadAll(services, settingsManager.Settings.PluginSettings, settingsManager.Settings.DisabledPlugins);
             foreach (var plugin in plugins)
             {
                 registry.Register(plugin.Id, plugin.Name, dc => plugin.CreateView(dc), isBuiltIn: false);
@@ -267,11 +342,79 @@ public partial class App : Application
         var viewModel = _host?.Services.GetRequiredService<IslandViewModel>();
         viewModel?.Cleanup();
 
+        _pluginLoader?.DetachIslandIntegrations();
         _pluginLoader?.Dispose();
         _trayIcon?.Dispose();
         _host?.Dispose();
-        SingleInstanceMutex.ReleaseMutex();
+        try { SingleInstanceMutex.ReleaseMutex(); } catch { }
         Shutdown();
+    }
+
+    private void RestartApplication()
+    {
+        try
+        {
+            var exePath = Environment.ProcessPath
+                          ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                MessageBox.Show("Could not determine executable path for restart.", "Peak", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Write a tiny .bat helper into temp that waits for our PID to exit,
+            // then launches the exe. Running it via ShellExecute (UseShellExecute=true)
+            // ensures it is fully detached from our process — it survives our shutdown
+            // even if we are inside a job object.
+            var currentPid = Environment.ProcessId;
+            var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "peak_restart.log");
+            var batPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"peak_restart_{Guid.NewGuid():N}.bat");
+            var bat = $@"@echo off
+echo [%date% %time%] restart helper starting, waiting for pid {currentPid} > ""{logPath}""
+:waitloop
+tasklist /FI ""PID eq {currentPid}"" 2>nul | find ""{currentPid}"" >nul
+if not errorlevel 1 (
+    ping -n 2 127.0.0.1 >nul
+    goto waitloop
+)
+echo [%date% %time%] pid gone, starting exe >> ""{logPath}""
+start """" ""{exePath}""
+echo [%date% %time%] done >> ""{logPath}""
+(goto) 2>nul & del ""%~f0""
+";
+            System.IO.File.WriteAllText(batPath, bat);
+
+            // Clean shutdown of services first
+            try { var viewModel = _host?.Services.GetService<IslandViewModel>(); viewModel?.Cleanup(); } catch { }
+            try { _pluginLoader?.DetachIslandIntegrations(); } catch { }
+            try { _pluginLoader?.Dispose(); } catch { }
+            try { _islandWindow?.Close(); } catch { }
+            try { _trayIcon?.Dispose(); } catch { }
+            try { _host?.Dispose(); } catch { }
+
+            // Release the single-instance mutex so the new process can acquire it
+            try { SingleInstanceMutex.ReleaseMutex(); } catch { }
+
+            // Launch helper detached via ShellExecute
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = batPath,
+                UseShellExecute = true,
+                CreateNoWindow = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+            };
+            System.Diagnostics.Process.Start(psi);
+
+            // Force-exit: plugin background threads and native handles can keep
+            // Shutdown() from actually terminating the process, leaving the notch
+            // visible. Environment.Exit guarantees the PID is gone so the helper
+            // script can start the fresh instance.
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Restart failed:\n{ex.Message}", "Peak", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -74,6 +74,10 @@ public partial class IslandWindow : Window
     private AudioVisualizerService? _audioVisualizer;
     private readonly Rectangle[] _vizBarsRight = new Rectangle[AudioVisualizerService.BarCount];
     private bool _visualizerRunning;
+    private UIElement? _visualizerOverride;
+
+    // Plugin extension points
+    public Func<CollapsedWidget, FrameworkElement?>? ExternalCollapsedRenderer { get; set; }
 
     // Unhide greeting messages (keep short — must fit ~200px)
     private static readonly string[] _greetings =
@@ -322,18 +326,49 @@ public partial class IslandWindow : Window
         _separators[0].Visibility = rowHasContent[0] && rowHasContent[1] ? Visibility.Visible : Visibility.Collapsed;
         _separators[1].Visibility = (rowHasContent[1] || rowHasContent[0]) && rowHasContent[2] ? Visibility.Visible : Visibility.Collapsed;
 
-        // Calculate height: each row ~85px (enough for media widget with progress bar),
-        // separator ~17px (1px + 8px*2 margin)
-        int visibleRows = rowHasContent.Count(r => r);
+        // Dynamic row heights: each row sizes to fit its largest widget
+        // Separator ~17px (1px + 8px*2 margin)
+        int[] rowHeights = new int[3];
+        for (int i = 0; i < 3; i++)
+        {
+            if (!rowHasContent[i]) { rowHeights[i] = 0; continue; }
+            var leftSlot = GetSlot(i * 2);
+            var rightSlot = _viewModel.GetRowMode(i) == RowMode.Wide ? WidgetType.None : GetSlot(i * 2 + 1);
+            rowHeights[i] = Math.Max(GetWidgetHeight(leftSlot), GetWidgetHeight(rightSlot));
+            // Edit mode needs room for ComboBoxes
+            if (_viewModel.IsEditMode && rowHeights[i] < 55) rowHeights[i] = 55;
+            _widgetRows[i].Height = rowHeights[i];
+        }
+
         int visibleSeps = (rowHasContent[0] && rowHasContent[1] ? 1 : 0)
                         + ((rowHasContent[0] || rowHasContent[1]) && rowHasContent[2] ? 1 : 0);
-        var contentH = visibleRows * 85 + visibleSeps * 17;
+        var contentH = rowHeights.Sum() + visibleSeps * 17;
         if (_viewModel.IsEditMode) contentH += 35;
         // Add space for notification banner if visible
         if (_viewModel.HasNotification) contentH += 60;
         if (contentH < 40) contentH = 40;
         ExpandedSize = (460, contentH);
     }
+
+    private static int GetWidgetHeight(WidgetType type) => type switch
+    {
+        WidgetType.None => 0,
+        // Compact: just text/small icons
+        WidgetType.Clock => 60,
+        WidgetType.Weather => 60,
+        WidgetType.SystemMonitor => 70,
+        WidgetType.Network => 70,
+        WidgetType.Timer => 60,
+        WidgetType.Pomodoro => 60,
+        // Content-heavy: need more vertical space
+        WidgetType.Media => 95,
+        WidgetType.Calendar => 100,
+        WidgetType.QuickAccess => 100,
+        WidgetType.Clipboard => 100,
+        WidgetType.QuickNotes => 100,
+        WidgetType.VolumeMixer => 120,
+        _ => 85
+    };
 
     // Make ExpandedSize mutable for dynamic sizing
     private static (double W, double H) ExpandedSize = (460, 280);
@@ -834,21 +869,31 @@ public partial class IslandWindow : Window
 
     public void RenderCollapsedSlots()
     {
-        CollapsedSlotLeft.Content = CreateCollapsedWidget(_viewModel.CollapsedLeft);
-        CollapsedSlotCenter.Content = CreateCollapsedWidget(_viewModel.CollapsedCenter);
-        CollapsedSlotRight.Content = CreateCollapsedWidget(_viewModel.CollapsedRight);
+        var leftContent = CreateCollapsedWidget(_viewModel.CollapsedLeft);
+        var centerContent = CreateCollapsedWidget(_viewModel.CollapsedCenter);
+        var rightContent = CreateCollapsedWidget(_viewModel.CollapsedRight);
 
-        bool hasLeft = _viewModel.CollapsedLeft != CollapsedWidget.None;
-        bool hasCenter = _viewModel.CollapsedCenter != CollapsedWidget.None;
-        bool hasRight = _viewModel.CollapsedRight != CollapsedWidget.None;
+        CollapsedSlotLeft.Content = leftContent;
+        CollapsedSlotCenter.Content = centerContent;
+        CollapsedSlotRight.Content = rightContent;
+
+        // Use actual content (not just enum != None) so plugin-driven slots
+        // that return null (e.g. Discord not in call) collapse properly.
+        bool hasLeft = leftContent != null;
+        bool hasCenter = centerContent != null;
+        bool hasRight = rightContent != null;
 
         CollapsedSep1.Visibility = hasLeft && hasCenter ? Visibility.Visible : Visibility.Collapsed;
-        CollapsedSep2.Visibility = hasCenter && hasRight ? Visibility.Visible
-            : hasLeft && hasRight && !hasCenter ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedSep2.Visibility = (hasCenter && hasRight)
+            || (hasLeft && hasRight && !hasCenter) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private FrameworkElement? CreateCollapsedWidget(CollapsedWidget type)
     {
+        // Give plugins first chance to render this collapsed widget
+        var pluginContent = ExternalCollapsedRenderer?.Invoke(type);
+        if (pluginContent != null) return pluginContent;
+
         switch (type)
         {
             case CollapsedWidget.Clock:
@@ -886,10 +931,94 @@ public partial class IslandWindow : Window
                 media.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("MediaTitle"));
                 return media;
 
+            // DiscordCallCount is handled entirely by the plugin renderer.
+            // If the plugin returns null (not in a call), the slot stays empty.
+
             default:
                 return null;
         }
     }
+
+    // ─── Visualizer Override (Plugin Hook) ───────────────────────
+
+    public void SetVisualizerOverride(UIElement? content)
+    {
+        _visualizerOverride = content;
+
+        // Remove any previous size-sync handler
+        if (_overrideSizeHandler != null)
+        {
+            IslandBorder.SizeChanged -= _overrideSizeHandler;
+            _overrideSizeHandler = null;
+        }
+
+        if (content != null)
+        {
+            // Stop standard visualizer, clear bars, show custom content
+            if (_visualizerRunning && _audioVisualizer != null)
+            {
+                _audioVisualizer.LevelsUpdated -= OnVisualizerLevels;
+                _audioVisualizer.Stop();
+                _visualizerRunning = false;
+            }
+            VisualizerRight.Children.Clear();
+
+            const double inset = 3.0; // gap between image and circle border on each side
+            void ApplySize()
+            {
+                var d = IslandBorder.ActualHeight;
+                if (d <= 0) return;
+                VisualizerRight.Width = d;
+                VisualizerRight.Height = d;
+                var inner = Math.Max(0, d - 2 * inset);
+                if (content is FrameworkElement el)
+                {
+                    el.Width = inner;
+                    el.Height = inner;
+                    Canvas.SetLeft(el, inset);
+                    Canvas.SetTop(el, inset);
+                }
+                VisualizerCircle.CornerRadius = new CornerRadius(d / 2);
+                PositionVisualizerCircle();
+            }
+
+            if (content is FrameworkElement fe)
+            {
+                fe.HorizontalAlignment = HorizontalAlignment.Center;
+                fe.VerticalAlignment = VerticalAlignment.Center;
+            }
+            VisualizerRight.Children.Add(content);
+
+            // Respect current island state — bubble is only shown in the collapsed notch.
+            UpdateVisualizerState();
+
+            // Initial sizing — may be 0 if window hasn't laid out yet.
+            ApplySize();
+
+            // Keep override in sync with the island border size (handles collapse/expand).
+            _overrideSizeHandler = (_, _) => ApplySize();
+            IslandBorder.SizeChanged += _overrideSizeHandler;
+
+            // If initial size was 0, also schedule a deferred apply after layout pass.
+            if (IslandBorder.ActualHeight <= 0)
+                Dispatcher.BeginInvoke(new Action(ApplySize), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+        else
+        {
+            // Restore standard bars
+            VisualizerRight.Children.Clear();
+            VisualizerRight.Width = 22;
+            VisualizerRight.Height = 16;
+            VisualizerCircle.CornerRadius = new CornerRadius(6);
+            // Reset visibility — UpdateVisualizerState will set Visible if music is playing.
+            VisualizerCircle.Visibility = Visibility.Collapsed;
+            for (int i = 0; i < _vizBarsRight.Length; i++) _vizBarsRight[i] = null!;
+            InitVisualizerBars();
+            UpdateVisualizerState();
+        }
+    }
+
+    private SizeChangedEventHandler? _overrideSizeHandler;
 
     // ─── ViewModel Property Changes ──────────────────────────────
 
@@ -975,6 +1104,15 @@ public partial class IslandWindow : Window
 
     private void UpdateVisualizerState()
     {
+        // If a plugin has taken over the bubble, keep it visible and skip the audio visualizer.
+        if (_visualizerOverride != null)
+        {
+            VisualizerCircle.Visibility = _viewModel.CurrentState is IslandState.Collapsed
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            return;
+        }
+
         if (_viewModel.HasMedia && _viewModel.IsPlaying &&
             _viewModel.CurrentState is IslandState.Collapsed)
         {

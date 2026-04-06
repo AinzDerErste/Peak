@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using Microsoft.Extensions.DependencyInjection;
 using Peak.App.ViewModels;
 using Peak.Core.Configuration;
+using Peak.Core.Plugins;
 using Peak.Core.Services;
 
 namespace Peak.App.Views;
@@ -23,6 +24,13 @@ public partial class SettingsWindow : Window
     private uint _recordedHotkeyModifiers;
     private uint _recordedHotkeyVk;
     private string _recordedHotkeyDisplay = "";
+
+    // Plugin settings edit state: (pluginId, fieldKey) → TextBox
+    private readonly List<(string PluginId, string Key, TextBox Box)> _pluginFieldBoxes = new();
+
+    // Plugin enable/disable state: pluginId → CheckBox (true = enabled)
+    private readonly Dictionary<string, CheckBox> _pluginEnabledChecks = new();
+    private readonly HashSet<string> _initialDisabledPlugins = new();
 
     public SettingsWindow(SettingsManager settingsManager)
     {
@@ -53,6 +61,12 @@ public partial class SettingsWindow : Window
         ShowNotificationsCheck.IsChecked = s.ShowNotifications;
         ShowTimerCheck.IsChecked = s.ShowTimer;
         ShowBorderCheck.IsChecked = s.ShowBorder;
+
+        // Network graph style
+        if (s.NetworkGraphStyle == NetworkGraphStyle.Bars)
+            NetGraphBarsRadio.IsChecked = true;
+        else
+            NetGraphLineRadio.IsChecked = true;
         PostalCodeBox.Text = s.WeatherPostalCode;
         CountryCodeBox.Text = s.WeatherCountryCode;
 
@@ -75,6 +89,179 @@ public partial class SettingsWindow : Window
 
         // Notification apps
         LoadNotificationApps(s);
+
+        // Plugins (inline: toggle + settings per card)
+        BuildPluginList();
+    }
+
+    private void BuildPluginList()
+    {
+        PluginList.Children.Clear();
+        _pluginEnabledChecks.Clear();
+        _pluginFieldBoxes.Clear();
+        _initialDisabledPlugins.Clear();
+
+        // Remove the old separate PluginsCard — everything is inline now
+        PluginsCard.Visibility = Visibility.Collapsed;
+
+        var disabled = _settingsManager.Settings.DisabledPlugins;
+        foreach (var id in disabled) _initialDisabledPlugins.Add(id);
+
+        // Discover all plugins on disk (including disabled ones)
+        var pluginsDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Peak", "plugins");
+        var tempLoader = new PluginLoader(pluginsDir);
+        var discovered = tempLoader.DiscoverAll();
+
+        // Also include currently loaded plugins (they have richer info)
+        var loader = ((App)Application.Current).PluginLoader;
+        var loadedIds = new HashSet<string>();
+        if (loader != null)
+            foreach (var p in loader.LoadedPlugins)
+                loadedIds.Add(p.Id);
+
+        // Build settings schemas lookup (only for loaded/enabled plugins)
+        var schemasMap = new Dictionary<string, PluginSettingsInfo>();
+        if (loader != null)
+        {
+            foreach (var schema in loader.GetPluginSettingsSchemas())
+                schemasMap[schema.PluginId] = schema;
+        }
+
+        // Merge: show loaded plugins first, then any discovered-but-disabled ones
+        var allPlugins = new List<(string Id, string Name)>();
+        if (loader != null)
+            foreach (var p in loader.LoadedPlugins)
+                allPlugins.Add((p.Id, p.Name));
+        foreach (var (id, name) in discovered)
+            if (!loadedIds.Contains(id))
+                allPlugins.Add((id, name));
+
+        if (allPlugins.Count == 0)
+        {
+            var hint = new TextBlock
+            {
+                Text = "No plugins installed. Place plugin DLLs into %APPDATA%\\Peak\\plugins\\<name>\\",
+                Style = (Style)FindResource("SubLabel"),
+                FontStyle = FontStyles.Italic,
+                TextWrapping = TextWrapping.Wrap
+            };
+            PluginList.Children.Add(hint);
+            return;
+        }
+
+        var labelStyle = (Style)FindResource("Label");
+        var subLabelStyle = (Style)FindResource("SubLabel");
+        var cardStyle = (Style)FindResource("Card");
+
+        foreach (var (id, name) in allPlugins)
+        {
+            bool isEnabled = !disabled.Contains(id);
+            bool hasSettings = schemasMap.TryGetValue(id, out var schema) && schema.Fields.Count > 0;
+
+            var card = new Border { Style = cardStyle };
+            var cardStack = new StackPanel();
+
+            // ── Header row: name + toggle ──
+            var header = new DockPanel();
+            var nameBlock = new TextBlock
+            {
+                Text = name,
+                Style = labelStyle,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var toggle = new CheckBox
+            {
+                Style = (Style)FindResource("ToggleSwitch"),
+                IsChecked = isEnabled,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            _pluginEnabledChecks[id] = toggle;
+
+            DockPanel.SetDock(nameBlock, Dock.Left);
+            header.Children.Add(nameBlock);
+            header.Children.Add(toggle);
+            cardStack.Children.Add(header);
+
+            // ── Inline settings (only for enabled/loaded plugins with settings) ──
+            if (isEnabled && hasSettings && schema != null)
+            {
+                // Separator
+                var sep = new Border
+                {
+                    Height = 1,
+                    Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+                    Margin = new Thickness(-16, 12, -16, 8)
+                };
+                cardStack.Children.Add(sep);
+
+                foreach (var field in schema.Fields)
+                {
+                    var fieldLabel = new TextBlock
+                    {
+                        Text = field.Label,
+                        Style = subLabelStyle,
+                        Margin = new Thickness(0, 6, 0, 2)
+                    };
+                    cardStack.Children.Add(fieldLabel);
+
+                    TextBox box;
+                    if (field.Kind == 1) // Password
+                    {
+                        box = new TextBox
+                        {
+                            FontFamily = new FontFamily("Consolas"),
+                            Text = field.CurrentValue ?? "",
+                            Tag = "password"
+                        };
+                    }
+                    else
+                    {
+                        box = new TextBox { Text = field.CurrentValue ?? "" };
+                    }
+
+                    box.FontSize = 13;
+                    box.Padding = new Thickness(8, 6, 8, 6);
+                    box.Margin = new Thickness(0, 0, 0, 2);
+                    box.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+                    box.Foreground = Brushes.White;
+                    box.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+                    box.BorderThickness = new Thickness(1);
+                    box.CaretBrush = Brushes.White;
+
+                    cardStack.Children.Add(box);
+                    _pluginFieldBoxes.Add((schema.PluginId, field.Key, box));
+
+                    if (!string.IsNullOrWhiteSpace(field.Description))
+                    {
+                        var desc = new TextBlock
+                        {
+                            Text = field.Description,
+                            Style = subLabelStyle,
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin = new Thickness(0, 2, 0, 0)
+                        };
+                        cardStack.Children.Add(desc);
+                    }
+                }
+            }
+            else if (!isEnabled)
+            {
+                var disabledHint = new TextBlock
+                {
+                    Text = "Enable plugin to configure settings",
+                    Style = subLabelStyle,
+                    FontStyle = FontStyles.Italic,
+                    Margin = new Thickness(0, 6, 0, 0)
+                };
+                cardStack.Children.Add(disabledHint);
+            }
+
+            card.Child = cardStack;
+            PluginList.Children.Add(card);
+        }
     }
 
     private void LoadNotificationApps(AppSettings s)
@@ -102,6 +289,7 @@ public partial class SettingsWindow : Window
         (CollapsedWidget.WeatherIcon, "Weather Icon"),
         (CollapsedWidget.Date, "Date"),
         (CollapsedWidget.MediaTitle, "Media Title"),
+        (CollapsedWidget.DiscordCallCount, "Discord Call Count"),
     ];
 
     private void LoadCollapsedCombos(CollapsedWidget[] slots)
@@ -159,6 +347,10 @@ public partial class SettingsWindow : Window
 
         s.ShowBorder = ShowBorderCheck.IsChecked ?? true;
 
+        s.NetworkGraphStyle = (NetGraphBarsRadio.IsChecked == true)
+            ? NetworkGraphStyle.Bars
+            : NetworkGraphStyle.Line;
+
         s.IslandBackground = _selectedBgColor;
         s.AccentColor = _selectedAccentColor;
         s.ThemePreset = _selectedThemePreset;
@@ -174,6 +366,20 @@ public partial class SettingsWindow : Window
             (CollapsedCenterCombo.SelectedItem as ComboBoxItem)?.Tag is CollapsedWidget c ? c : CollapsedWidget.None,
             (CollapsedRightCombo.SelectedItem as ComboBoxItem)?.Tag is CollapsedWidget r ? r : CollapsedWidget.None,
         ];
+
+        // Push the new collapsed slot values into the live IslandViewModel and
+        // trigger a re-render — otherwise the island keeps showing the layout
+        // that was active at startup until the app is reloaded.
+        try
+        {
+            var app = (App)Application.Current;
+            var vm = app.Services.GetRequiredService<IslandViewModel>();
+            vm.CollapsedLeft = s.CollapsedSlots[0];
+            vm.CollapsedCenter = s.CollapsedSlots[1];
+            vm.CollapsedRight = s.CollapsedSlots[2];
+            app.Services.GetRequiredService<IslandWindow>().RenderCollapsedSlots();
+        }
+        catch { /* island may not be fully initialized in edge cases */ }
 
         // Audio
         s.AudioDeviceId = (AudioDeviceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
@@ -195,8 +401,50 @@ public partial class SettingsWindow : Window
         s.MutedNotificationApps = new HashSet<string>(
             _notificationApps.Where(a => !a.IsEnabled).Select(a => a.AppName));
 
+        // Plugin enable/disable
+        var newDisabled = new HashSet<string>();
+        foreach (var (id, check) in _pluginEnabledChecks)
+        {
+            if (check.IsChecked != true)
+                newDisabled.Add(id);
+        }
+        s.DisabledPlugins = newDisabled;
+
+        bool pluginStateChanged = !newDisabled.SetEquals(_initialDisabledPlugins);
+
+        // Plugin settings: push every field value back into its plugin, then
+        // collect the serialized blobs and replace PluginSettings entirely.
+        var loader = ((App)Application.Current).PluginLoader;
+        if (loader != null && _pluginFieldBoxes.Count > 0)
+        {
+            foreach (var (pluginId, key, box) in _pluginFieldBoxes)
+                loader.SetPluginSetting(pluginId, key, box.Text);
+
+            var collected = loader.CollectAllSettings();
+            // Merge (overwrite) rather than replace — keeps entries from plugins
+            // that haven't been touched during this session.
+            foreach (var kvp in collected)
+                s.PluginSettings[kvp.Key] = kvp.Value;
+        }
+
         _settingsManager.Save();
         Close();
+
+        if (pluginStateChanged)
+        {
+            var result = MessageBox.Show(
+                "Plugin changes require a reload to take effect.\nReload now?",
+                "Peak",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                // Trigger in-process reload
+                typeof(App).GetMethod("ReloadApplication",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(Application.Current, null);
+            }
+        }
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
@@ -411,6 +659,30 @@ public partial class SettingsWindow : Window
         }
 
         CheckUpdateButton.IsEnabled = true;
+    }
+
+    private void OnNetGraphStyleChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        var style = (NetGraphBarsRadio.IsChecked == true)
+            ? NetworkGraphStyle.Bars
+            : NetworkGraphStyle.Line;
+        _settingsManager.Settings.NetworkGraphStyle = style;
+        // Trigger live redraw on any currently-mounted NetworkWidget
+        foreach (Window w in Application.Current.Windows)
+            RefreshNetworkWidgets(w);
+    }
+
+    private static void RefreshNetworkWidgets(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Widgets.NetworkWidget nw)
+                nw.RedrawGraph();
+            RefreshNetworkWidgets(child);
+        }
     }
 
     private void OnTestPeekClick(object sender, RoutedEventArgs e)
