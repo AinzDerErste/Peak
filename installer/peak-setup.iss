@@ -38,7 +38,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "Start Peak with Windows"; GroupDescription: "Additional options:"
-Name: "discord"; Description: "Install Discord plugin (voice call integration)"; GroupDescription: "Plugins:"; Flags: checked
+Name: "discord"; Description: "Install Discord plugin (voice call integration)"; GroupDescription: "Plugins:"
 
 [Files]
 ; Main application
