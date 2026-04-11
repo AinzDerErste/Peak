@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Microsoft.Extensions.DependencyInjection;
 using Peak.App.ViewModels;
@@ -32,17 +33,32 @@ public partial class SettingsWindow : Window
     private readonly Dictionary<string, CheckBox> _pluginEnabledChecks = new();
     private readonly HashSet<string> _initialDisabledPlugins = new();
 
+    // Update service subscription (needs unsubscribe on close to avoid leaks)
+    private UpdateService? _updateService;
+    private Action? _updateHandler;
+
     public SettingsWindow(SettingsManager settingsManager)
     {
         InitializeComponent();
         _settingsManager = settingsManager;
         LoadSettings();
+        Closed += OnWindowClosed;
+    }
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        if (_updateService != null && _updateHandler != null)
+            _updateService.UpdateStatusChanged -= _updateHandler;
     }
 
     private void LoadSettings()
     {
-        // About
+        // About + subscribe to live update status
         VersionText.Text = $"v{UpdateService.CurrentVersion}";
+        _updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
+        RefreshUpdateUI(_updateService);
+        _updateHandler = () => Dispatcher.Invoke(() => RefreshUpdateUI(_updateService!));
+        _updateService.UpdateStatusChanged += _updateHandler;
 
         var s = _settingsManager.Settings;
         AlwaysVisibleCheck.IsChecked = s.Behavior == IslandBehavior.AlwaysVisible;
@@ -632,26 +648,46 @@ public partial class SettingsWindow : Window
             SensitivityLabel.Text = $"{(int)e.NewValue}%";
     }
 
+    private void RefreshUpdateUI(UpdateService svc)
+    {
+        if (svc.IsDownloaded)
+        {
+            UpdateStatusText.Text = $"v{svc.NewVersion} ready to install!";
+            UpdateStatusText.Foreground = (Brush)FindResource("AccentBrush");
+            InstallUpdateButton.Visibility = Visibility.Visible;
+            CheckUpdateButton.Content = "Check for Updates";
+            CheckUpdateButton.IsEnabled = true;
+        }
+        else if (svc.IsDownloading)
+        {
+            UpdateStatusText.Text = $"Downloading v{svc.NewVersion}... {svc.DownloadProgress}%";
+            UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
+            InstallUpdateButton.Visibility = Visibility.Collapsed;
+        }
+        else if (svc.UpdateAvailable)
+        {
+            UpdateStatusText.Text = $"v{svc.NewVersion} available";
+            UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
+            InstallUpdateButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
     {
         CheckUpdateButton.IsEnabled = false;
         UpdateStatusText.Text = "Checking...";
+        UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
 
         try
         {
             var updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
             await updateService.CheckForUpdateAsync();
 
-            if (updateService.UpdateAvailable)
-            {
-                UpdateStatusText.Text = updateService.IsDownloaded
-                    ? $"v{updateService.NewVersion} ready to install!"
-                    : $"v{updateService.NewVersion} available, downloading...";
-            }
-            else
+            if (!updateService.UpdateAvailable)
             {
                 UpdateStatusText.Text = "You're up to date!";
             }
+            // RefreshUpdateUI handles the rest via UpdateStatusChanged
         }
         catch
         {
@@ -659,6 +695,13 @@ public partial class SettingsWindow : Window
         }
 
         CheckUpdateButton.IsEnabled = true;
+    }
+
+    private void OnInstallUpdateClick(object sender, RoutedEventArgs e)
+    {
+        var updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
+        updateService.InstallUpdate();
+        Application.Current.Shutdown();
     }
 
     private void OnNetGraphStyleChanged(object sender, RoutedEventArgs e)
@@ -700,6 +743,23 @@ public partial class SettingsWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
             DragMove();
+    }
+
+    // ─── Tab crossfade animation ────────────────────────────────
+
+    private void OnTabChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // SelectionChanged bubbles from inner ComboBoxes/ListBoxes —
+        // only react when the TabControl itself is the source.
+        if (e.OriginalSource != sender) return;
+        if (sender is not TabControl tabs) return;
+        if (tabs.SelectedContent is not UIElement selected) return;
+
+        selected.BeginAnimation(OpacityProperty, null);
+        selected.Opacity = 0;
+        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+        selected.BeginAnimation(OpacityProperty, fadeIn);
     }
 
     // ─── Hotkey capture ──────────────────────────────────────────

@@ -1010,7 +1010,6 @@ public partial class IslandWindow : Window
             VisualizerRight.Width = 22;
             VisualizerRight.Height = 16;
             VisualizerCircle.CornerRadius = new CornerRadius(6);
-            // Reset visibility — UpdateVisualizerState will set Visible if music is playing.
             VisualizerCircle.Visibility = Visibility.Collapsed;
             for (int i = 0; i < _vizBarsRight.Length; i++) _vizBarsRight[i] = null!;
             InitVisualizerBars();

@@ -24,6 +24,21 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
+      - name: Verify csproj version matches tag
+        shell: pwsh
+        run: |
+          $file = "src/Peak.App/Peak.App.csproj"
+          $content = Get-Content $file -Raw
+          if ($content -match '<Version>(.*?)</Version>') {
+            $csprojVer = $Matches[1]
+            $tagVer = "${{ steps.version.outputs.VERSION }}"
+            if ($csprojVer -ne $tagVer) {
+              Write-Warning "::warning::Version mismatch! csproj=$csprojVer, tag=$tagVer. Overriding with tag version."
+            } else {
+              Write-Host "Version match confirmed: $csprojVer"
+            }
+          }
+
       - name: Set version in csproj
         shell: pwsh
         run: |
