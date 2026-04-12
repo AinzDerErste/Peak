@@ -217,6 +217,49 @@ public partial class SettingsWindow : Window
 
                 foreach (var field in schema.Fields)
                 {
+                    // Button fields render as a clickable button, not a text box
+                    if (field.Kind == 4) // Button
+                    {
+                        var pluginId = schema.PluginId;
+                        var fieldKey = field.Key;
+                        var btn = new Button
+                        {
+                            Content = field.Label,
+                            Style = (Style)FindResource("SubtleButton"),
+                            Padding = new Thickness(16, 6, 16, 6),
+                            Margin = new Thickness(0, 8, 0, 2),
+                            HorizontalAlignment = HorizontalAlignment.Left
+                        };
+                        btn.Click += (_, _) =>
+                        {
+                            // Trigger SetSettingValue on the plugin via reflection
+                            var loader = ((App)Application.Current).PluginLoader;
+                            var plugin = loader?.LoadedPlugins
+                                .FirstOrDefault(p => p.Id == pluginId);
+                            if (plugin != null)
+                            {
+                                var iface = plugin.Instance.GetType().GetInterfaces()
+                                    .FirstOrDefault(i => i.FullName == "Peak.Plugin.Sdk.IPluginSettingsProvider");
+                                var setter = iface?.GetMethod("SetSettingValue");
+                                setter?.Invoke(plugin.Instance, [fieldKey, null]);
+                            }
+                        };
+                        cardStack.Children.Add(btn);
+
+                        if (!string.IsNullOrWhiteSpace(field.Description))
+                        {
+                            var desc = new TextBlock
+                            {
+                                Text = field.Description,
+                                Style = subLabelStyle,
+                                TextWrapping = TextWrapping.Wrap,
+                                Margin = new Thickness(0, 2, 0, 0)
+                            };
+                            cardStack.Children.Add(desc);
+                        }
+                        continue;
+                    }
+
                     var fieldLabel = new TextBlock
                     {
                         Text = field.Label,

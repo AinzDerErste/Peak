@@ -199,7 +199,7 @@ public class TeamSpeakWsClient : IDisposable
             case "channelCreated":
             case "channelDeleted":
             case "channelMoved":
-                TeamSpeakLog.Write($"Channel event: {type}");
+            case "clientChannelGroupChanged":
                 break;
 
             case "connectStatusChanged":
@@ -423,42 +423,43 @@ public class TeamSpeakWsClient : IDisposable
         if (payload == null) return;
 
         var clientId = GetString(payload["clientId"]) ?? GetString(payload["id"]);
-        var channelId = GetString(payload["channelId"]) ?? GetString(payload["targetChannelId"]);
-        var nickname = GetString(payload["nickname"]) ?? GetString(payload["name"]);
+        // TS6 uses "newChannelId"/"oldChannelId" for clientMoved events
+        var newChannelId = GetString(payload["newChannelId"]) ?? GetString(payload["channelId"])
+                        ?? GetString(payload["targetChannelId"]);
+        var oldChannelId = GetString(payload["oldChannelId"]);
+        var nickname = GetString(payload["nickname"]) ?? GetString(payload["name"])
+                    ?? GetString(payload["properties"]?["nickname"]);
 
         if (string.IsNullOrEmpty(clientId)) return;
+
+        TeamSpeakLog.Write($"ClientEvent: {eventType} client={clientId} newCh={newChannelId} oldCh={oldChannelId}");
 
         switch (eventType)
         {
             case "clientEnteredView":
             case "clientUpdated":
-                if (!string.IsNullOrEmpty(channelId))
+                if (!string.IsNullOrEmpty(newChannelId))
                 {
-                    // Is this client in our channel?
-                    if (channelId == CurrentChannelId)
+                    if (newChannelId == CurrentChannelId)
                     {
                         Participants[clientId] = new TsParticipant
                         {
                             ClientId = clientId,
                             Nickname = nickname ?? Participants.GetValueOrDefault(clientId)?.Nickname ?? "Unknown",
-                            ChannelId = channelId
+                            ChannelId = newChannelId
                         };
                         ParticipantsChanged?.Invoke();
                     }
-                    // Did our local client move to a new channel?
-                    if (clientId == LocalClientId && channelId != CurrentChannelId)
+                    if (clientId == LocalClientId && newChannelId != CurrentChannelId)
                     {
-                        var oldChannel = CurrentChannelId;
-                        CurrentChannelId = channelId;
-                        // Clear participants and rebuild for new channel
+                        CurrentChannelId = newChannelId;
                         Participants.Clear();
                         Participants[clientId] = new TsParticipant
                         {
                             ClientId = clientId,
                             Nickname = nickname ?? "Me",
-                            ChannelId = channelId
+                            ChannelId = newChannelId
                         };
-                        TeamSpeakLog.Write($"Local client moved: {oldChannel} -> {channelId}");
                         VoiceChannelChanged?.Invoke();
                         ParticipantsChanged?.Invoke();
                     }
@@ -466,37 +467,37 @@ public class TeamSpeakWsClient : IDisposable
                 break;
 
             case "clientMoved":
-                if (!string.IsNullOrEmpty(channelId))
+                if (!string.IsNullOrEmpty(newChannelId))
                 {
                     if (clientId == LocalClientId)
                     {
-                        // We moved channels
-                        CurrentChannelId = channelId;
+                        CurrentChannelId = newChannelId;
                         Participants.Clear();
                         Participants[clientId] = new TsParticipant
                         {
                             ClientId = clientId,
                             Nickname = nickname ?? "Me",
-                            ChannelId = channelId
+                            ChannelId = newChannelId
                         };
-                        TeamSpeakLog.Write($"Local client moved to channel {channelId}");
+                        TeamSpeakLog.Write($"Local client moved to channel {newChannelId}");
                         VoiceChannelChanged?.Invoke();
                         ParticipantsChanged?.Invoke();
                     }
-                    else if (channelId == CurrentChannelId)
+                    else if (newChannelId == CurrentChannelId)
                     {
                         // Someone moved INTO our channel
                         Participants[clientId] = new TsParticipant
                         {
                             ClientId = clientId,
                             Nickname = nickname ?? "Unknown",
-                            ChannelId = channelId
+                            ChannelId = newChannelId
                         };
                         ParticipantsChanged?.Invoke();
                     }
-                    else if (Participants.TryRemove(clientId, out _))
+                    else if (oldChannelId == CurrentChannelId && Participants.TryRemove(clientId, out _))
                     {
                         // Someone moved OUT of our channel
+                        TeamSpeakLog.Write($"Client {clientId} left our channel ({oldChannelId} -> {newChannelId}), participants={Participants.Count}");
                         ParticipantsChanged?.Invoke();
                     }
                 }

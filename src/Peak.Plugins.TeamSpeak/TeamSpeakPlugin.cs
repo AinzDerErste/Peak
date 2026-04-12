@@ -70,6 +70,13 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
             Kind = PluginSettingFieldKind.Number,
             CurrentValue = _settings.Port.ToString(),
             Placeholder = "5899"
+        },
+        new PluginSettingField
+        {
+            Key = "ResetApiKey",
+            Label = "Reset API Key",
+            Description = "Clears the saved API key and reconnects. TeamSpeak will ask you to re-approve Peak Notch.",
+            Kind = PluginSettingFieldKind.Button
         }
     ];
 
@@ -78,6 +85,19 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         if (key == "Port" && int.TryParse(value, out var port) && port is > 0 and < 65536)
         {
             _settings.Port = port;
+        }
+        else if (key == "ResetApiKey")
+        {
+            TeamSpeakLog.Write("Settings: API key reset requested by user.");
+            _settings.ApiKey = null;
+            try { _host?.RequestSettingsSave(); } catch { }
+
+            // Force reconnect without API key
+            try { _reconnectCts?.Cancel(); } catch { }
+            _client?.Dispose();
+            _client = null;
+            _reconnectCts = new CancellationTokenSource();
+            _ = Task.Run(() => ConnectLoopAsync(_reconnectCts.Token));
         }
     }
 
@@ -112,6 +132,7 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
 
     private async Task ConnectLoopAsync(CancellationToken ct)
     {
+        int authFailCount = 0;
         TeamSpeakLog.Write($"ConnectLoop: starting (port={_settings.Port}, apiKey set={!string.IsNullOrEmpty(_settings.ApiKey)})");
         while (!ct.IsCancellationRequested)
         {
@@ -135,6 +156,12 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
                     // Wait while connected
                     while (_client.IsConnected && !ct.IsCancellationRequested)
                         await Task.Delay(500, ct).ConfigureAwait(false);
+
+                    // If we were successfully connected (got participants), reset fail counter
+                    if (_client.Participants.Count > 0 || !string.IsNullOrEmpty(_client.CurrentChannelId))
+                        authFailCount = 0;
+                    else
+                        authFailCount++;
                 }
                 else
                 {
@@ -144,11 +171,20 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
             catch (Exception ex)
             {
                 TeamSpeakLog.Write($"ConnectLoop error: {ex.Message}");
+                authFailCount++;
             }
             finally
             {
                 try { _client?.Dispose(); } catch { }
                 _client = null;
+            }
+
+            // If auth keeps failing with a saved key, clear it so TS6 prompts fresh approval
+            if (authFailCount >= 3 && !string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                TeamSpeakLog.Write("ConnectLoop: API key appears invalid after 3 failures, clearing for re-auth.");
+                _settings.ApiKey = null;
+                try { _host?.RequestSettingsSave(); } catch { }
             }
 
             try { await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false); }

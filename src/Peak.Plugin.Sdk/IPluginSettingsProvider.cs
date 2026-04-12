@@ -26,7 +26,8 @@ public enum PluginSettingFieldKind
     Text,
     Password,
     Bool,
-    Number
+    Number,
+    Button
 }
 
 public class PluginSettingField
