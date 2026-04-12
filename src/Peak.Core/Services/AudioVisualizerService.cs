@@ -16,6 +16,7 @@ public class AudioVisualizerService : IDisposable
     public const int BarCount = 5;
     private readonly float[] _barLevels = new float[BarCount];
     private readonly float[] _smoothed = new float[BarCount];
+    private readonly float[] _hanningWindow = new float[2048];
 
     public event Action<float[]>? LevelsUpdated;
 
@@ -45,6 +46,10 @@ public class AudioVisualizerService : IDisposable
             _fftPos = 0;
             Array.Clear(_smoothed);
             Array.Clear(_barLevels);
+
+            // Pre-compute Hanning window coefficients
+            for (int i = 0; i < _hanningWindow.Length; i++)
+                _hanningWindow[i] = 0.5f * (1f - MathF.Cos(2f * MathF.PI * i / _hanningWindow.Length));
 
             var enumerator = new MMDeviceEnumerator();
             MMDevice? device = null;
@@ -116,21 +121,21 @@ public class AudioVisualizerService : IDisposable
         int channels = format.Channels;
         int floatCount = e.BytesRecorded / 4; // always 32-bit float for WASAPI
 
-        for (int i = 0; i < floatCount; i += channels)
+        lock (_lock)
         {
-            int bytePos = i * 4;
-            if (bytePos + 4 > e.BytesRecorded) break;
-
-            float sample = BitConverter.ToSingle(e.Buffer, bytePos);
-
-            if (channels >= 2 && bytePos + 8 <= e.BytesRecorded)
+            for (int i = 0; i < floatCount; i += channels)
             {
-                float right = BitConverter.ToSingle(e.Buffer, bytePos + 4);
-                sample = (sample + right) * 0.5f;
-            }
+                int bytePos = i * 4;
+                if (bytePos + 4 > e.BytesRecorded) break;
 
-            lock (_lock)
-            {
+                float sample = BitConverter.ToSingle(e.Buffer, bytePos);
+
+                if (channels >= 2 && bytePos + 8 <= e.BytesRecorded)
+                {
+                    float right = BitConverter.ToSingle(e.Buffer, bytePos + 4);
+                    sample = (sample + right) * 0.5f;
+                }
+
                 _fftBuffer[_fftPos] = sample;
                 _fftPos++;
 
@@ -159,15 +164,15 @@ public class AudioVisualizerService : IDisposable
                 _smoothed[b] *= 0.85f;
                 _barLevels[b] = _smoothed[b];
             }
-            LevelsUpdated?.Invoke(_barLevels);
+            var snapshot = (float[])_barLevels.Clone();
+            LevelsUpdated?.Invoke(snapshot);
             return;
         }
 
-        // Apply Hanning window
+        // Apply pre-computed Hanning window
         for (int i = 0; i < _fftBuffer.Length; i++)
         {
-            float window = 0.5f * (1f - MathF.Cos(2f * MathF.PI * i / _fftBuffer.Length));
-            _fftComplex[i].X = _fftBuffer[i] * window;
+            _fftComplex[i].X = _fftBuffer[i] * _hanningWindow[i];
             _fftComplex[i].Y = 0;
         }
 
@@ -197,7 +202,8 @@ public class AudioVisualizerService : IDisposable
             _barLevels[b] = _smoothed[b];
         }
 
-        LevelsUpdated?.Invoke(_barLevels);
+        var snap = (float[])_barLevels.Clone();
+        LevelsUpdated?.Invoke(snap);
     }
 
     public void Dispose()

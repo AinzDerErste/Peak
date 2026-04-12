@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Windows.Media.Imaging;
@@ -7,11 +8,11 @@ namespace Peak.Plugins.Discord;
 /// <summary>
 /// Downloads and caches Discord user avatars to disk + memory.
 /// </summary>
-public class AvatarCache
+public class AvatarCache : IDisposable
 {
     private readonly string _cacheDir;
     private readonly HttpClient _http = new();
-    private readonly Dictionary<string, BitmapImage> _memory = new();
+    private readonly ConcurrentDictionary<string, BitmapImage> _memory = new();
 
     public AvatarCache()
     {
@@ -59,5 +60,10 @@ public class AvatarCache
             return bi;
         }
         catch { return null; }
+    }
+
+    public void Dispose()
+    {
+        _http.Dispose();
     }
 }

@@ -38,7 +38,7 @@ public class DiscordRpcClient : IDisposable
     public string? CurrentUserName { get; private set; }
     public string? CurrentUserAvatar { get; private set; }
     public string? CurrentChannelId { get; private set; }
-    public Dictionary<string, VoiceParticipant> Participants { get; } = new();
+    public ConcurrentDictionary<string, VoiceParticipant> Participants { get; } = new();
 
     // Events
     public event Action? Connected;
@@ -434,7 +434,7 @@ public class DiscordRpcClient : IDisposable
         else if (cmd == "DISPATCH" && evt == "VOICE_STATE_DELETE")
         {
             var uid = data?["user"]?["id"]?.GetValue<string>();
-            if (!string.IsNullOrEmpty(uid) && Participants.Remove(uid))
+            if (!string.IsNullOrEmpty(uid) && Participants.TryRemove(uid, out _))
                 ParticipantsChanged?.Invoke();
         }
         else if (cmd == "DISPATCH" && evt == "SPEAKING_START")
@@ -498,8 +498,11 @@ public class DiscordRpcClient : IDisposable
     public void Dispose()
     {
         try { _cts?.Cancel(); } catch { }
+        // Wait briefly for the read loop to exit before disposing the pipe
+        try { _readLoop?.Wait(TimeSpan.FromSeconds(2)); } catch { }
         try { _pipe?.Dispose(); } catch { }
         _pipe = null;
+        try { _cts?.Dispose(); } catch { }
         _http.Dispose();
     }
 }
@@ -514,19 +517,25 @@ public class VoiceParticipant
 
 /// <summary>
 /// Simple file logger — writes to %APPDATA%\Peak\plugins\discord\plugin.log.
+/// Uses a buffered StreamWriter with auto-flush to avoid opening/closing the file per message.
 /// </summary>
 internal static class DiscordLog
 {
     private static readonly object _lock = new();
-    private static readonly string _path;
+    private static StreamWriter? _writer;
 
     static DiscordLog()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Peak", "plugins", "discord");
-        try { Directory.CreateDirectory(dir); } catch { }
-        _path = Path.Combine(dir, "plugin.log");
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Peak", "plugins", "discord");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "plugin.log");
+            _writer = new StreamWriter(path, append: true) { AutoFlush = true };
+        }
+        catch { }
     }
 
     public static void Write(string line)
@@ -535,7 +544,7 @@ internal static class DiscordLog
         {
             lock (_lock)
             {
-                File.AppendAllText(_path, $"[{DateTime.Now:HH:mm:ss.fff}] {line}{Environment.NewLine}");
+                _writer?.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {line}");
             }
         }
         catch { }

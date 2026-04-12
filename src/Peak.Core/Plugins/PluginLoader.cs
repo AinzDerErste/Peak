@@ -41,10 +41,7 @@ public class PluginLoader : IDisposable
                 var dlls = Directory.GetFiles(pluginDir, "*.dll");
                 foreach (var dll in dlls)
                 {
-                    var loaded = LoadAssembly(dll, services, savedSettings);
-                    // Filter out explicitly disabled plugins
-                    if (disabledPlugins is { Count: > 0 })
-                        loaded.RemoveAll(p => disabledPlugins.Contains(p.Id));
+                    var loaded = LoadAssembly(dll, services, savedSettings, disabledPlugins);
                     plugins.AddRange(loaded);
                 }
             }
@@ -107,7 +104,7 @@ public class PluginLoader : IDisposable
         return result;
     }
 
-    private List<LoadedPlugin> LoadAssembly(string dllPath, IServiceProvider services, Dictionary<string, JsonElement>? savedSettings)
+    private List<LoadedPlugin> LoadAssembly(string dllPath, IServiceProvider services, Dictionary<string, JsonElement>? savedSettings, HashSet<string>? disabledPlugins)
     {
         var results = new List<LoadedPlugin>();
 
@@ -140,6 +137,10 @@ public class PluginLoader : IDisposable
 
                 var id = idProp?.GetValue(instance) as string ?? type.FullName ?? type.Name;
                 var name = nameProp?.GetValue(instance) as string ?? type.Name;
+
+                // Skip disabled plugins BEFORE initializing them
+                if (disabledPlugins is { Count: > 0 } && disabledPlugins.Contains(id))
+                    continue;
 
                 // Initialize
                 initMethod?.Invoke(instance, [services]);

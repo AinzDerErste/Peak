@@ -141,7 +141,7 @@ public class MediaService : IDisposable
                 {
                     using var stream = await props.Thumbnail.OpenReadAsync();
                     using var memStream = new MemoryStream();
-                    var reader = new DataReader(stream);
+                    using var reader = new DataReader(stream);
                     await reader.LoadAsync((uint)stream.Size);
                     var bytes = new byte[stream.Size];
                     reader.ReadBytes(bytes);

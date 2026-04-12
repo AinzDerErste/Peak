@@ -993,13 +993,21 @@ public partial class IslandViewModel : ObservableObject
         _autoCollapseTimer.Stop();
         _weatherTimer.Stop();
         _clipboardPollTimer?.Stop();
+        _volumeMixerTimer?.Stop();
+
+        // Unsubscribe from service events to prevent leaks
+        _mediaService.MediaChanged -= OnMediaChanged;
+        _mediaService.PositionChanged -= OnMediaPositionChanged;
+        _systemMonitorService.StatsUpdated -= OnStatsUpdated;
+        _networkMonitorService.StatsUpdated -= OnNetworkStatsUpdated;
+        _notificationService.NewNotification -= OnNewNotification;
+
         _mediaService.Dispose();
         _systemMonitorService.Dispose();
         _networkMonitorService.Dispose();
         _notificationService.Dispose();
         _clipboardService.Dispose();
         _notesService.Dispose();
-        _volumeMixerTimer?.Stop();
         _volumeMixerService.Dispose();
         _timerService.Dispose();
         _pomodoroService.Dispose();

@@ -41,7 +41,9 @@ public class SettingsManager
         {
             Directory.CreateDirectory(SettingsDir);
             var json = JsonSerializer.Serialize(Settings, JsonOptions);
-            File.WriteAllText(SettingsPath, json);
+            var tempPath = SettingsPath + ".tmp";
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, SettingsPath, overwrite: true);
         }
         catch
         {

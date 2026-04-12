@@ -218,7 +218,11 @@ public class ClipboardService : IDisposable
         {
             var json = JsonSerializer.Serialize(_history,
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true });
-            File.WriteAllText(_historyPath, json);
+            Task.Run(() =>
+            {
+                try { File.WriteAllText(_historyPath, json); }
+                catch { }
+            });
         }
         catch { }
     }

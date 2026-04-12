@@ -121,7 +121,7 @@ public partial class IslandWindow : Window
         _translateTransform = new TranslateTransform(0, 0);
 
         Loaded += OnLoaded;
-        Closed += (_, _) => UnregisterGlobalHotkey();
+        Closed += OnWindowClosed;
         StateChanged += OnStateChanged;
         Deactivated += OnDeactivated;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -183,8 +183,7 @@ public partial class IslandWindow : Window
         ApplyBorderSetting();
 
         _fullscreenCheckTimer.Start();
-        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) =>
-            Dispatcher.Invoke(PositionWindowOnce);
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         // Initialize audio visualizer bars
         InitVisualizerBars();
@@ -199,6 +198,20 @@ public partial class IslandWindow : Window
         var workArea = SystemParameters.WorkArea;
         Left = workArea.Left + (workArea.Width - FixedWindowWidth) / 2;
         Top = workArea.Top + TopOffset;
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(PositionWindowOnce);
+    }
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        UnregisterGlobalHotkey();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _dragLeaveTimer?.Stop();
+        _fullscreenCheckTimer.Stop();
+        _mousePollingTimer?.Stop();
     }
 
     private void ApplyBorderSetting()
@@ -603,7 +616,10 @@ public partial class IslandWindow : Window
     {
         // Pick a random greeting (never repeat the last one)
         int idx;
-        do { idx = _greetingRng.Next(_greetings.Length); } while (idx == _lastGreetingIndex);
+        if (_greetings.Length <= 1)
+            idx = 0;
+        else
+            do { idx = _greetingRng.Next(_greetings.Length); } while (idx == _lastGreetingIndex);
         _lastGreetingIndex = idx;
         GreetingText.Text = _greetings[idx];
         GreetingText.Visibility = Visibility.Visible;

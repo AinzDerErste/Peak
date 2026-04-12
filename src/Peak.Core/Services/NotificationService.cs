@@ -11,6 +11,7 @@ public class NotificationService : IDisposable
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
     private readonly HashSet<uint> _seenIds = new();
+    private const int MaxSeenIds = 512;
 
     public event Action<Models.NotificationData>? NewNotification;
     public bool IsAvailable { get; private set; }
@@ -64,6 +65,7 @@ public class NotificationService : IDisposable
                 foreach (var notif in notifications)
                 {
                     if (_seenIds.Contains(notif.Id)) continue;
+                    if (_seenIds.Count >= MaxSeenIds) _seenIds.Clear();
                     _seenIds.Add(notif.Id);
 
                     var binding = notif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);

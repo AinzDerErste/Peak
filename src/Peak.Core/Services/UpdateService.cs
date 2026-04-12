@@ -10,8 +10,8 @@ public class UpdateService
     private readonly HttpClient _httpClient;
     private System.Threading.Timer? _checkTimer;
     private string? _downloadedInstallerPath;
+    private readonly SemaphoreSlim _checkLock = new(1, 1);
 
-    // TODO: Set this to the actual GitHub repo when created
     public const string GitHubOwner = "AinzDerErste";
     public const string GitHubRepo = "Peak";
 
@@ -23,6 +23,7 @@ public class UpdateService
     public bool IsDownloading { get; private set; }
     public bool IsDownloaded { get; private set; }
     public int DownloadProgress { get; private set; }
+    public bool DownloadFailed { get; private set; }
 
     public static string CurrentVersion
     {
@@ -52,6 +53,8 @@ public class UpdateService
 
     public async Task CheckForUpdateAsync()
     {
+        // Serialize checks so periodic timer and manual clicks can't race into the same temp file.
+        if (!await _checkLock.WaitAsync(0)) return;
         try
         {
             var url = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
@@ -67,9 +70,9 @@ public class UpdateService
                 NewVersion = remoteVersion;
                 ReleaseNotes = release.Body ?? "";
                 UpdateAvailable = true;
+                DownloadFailed = false;
                 UpdateStatusChanged?.Invoke();
 
-                // Auto-download
                 await DownloadUpdateAsync(release);
             }
         }
@@ -77,24 +80,33 @@ public class UpdateService
         {
             // GitHub not reachable or repo not found — silently ignore
         }
+        finally
+        {
+            _checkLock.Release();
+        }
     }
 
     private async Task DownloadUpdateAsync(GitHubRelease release)
     {
         var asset = release.Assets?.FirstOrDefault(a =>
             a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-        if (asset == null) return;
+        if (asset == null)
+        {
+            DownloadFailed = true;
+            UpdateStatusChanged?.Invoke();
+            return;
+        }
 
         try
         {
             IsDownloading = true;
+            DownloadProgress = 0;
             UpdateStatusChanged?.Invoke();
 
             var tempDir = Path.Combine(Path.GetTempPath(), "PeakUpdate");
             Directory.CreateDirectory(tempDir);
             var filePath = Path.Combine(tempDir, asset.Name);
 
-            // Delete old downloads
             foreach (var old in Directory.GetFiles(tempDir, "*.exe"))
             {
                 try { File.Delete(old); } catch { }
@@ -110,6 +122,7 @@ public class UpdateService
             var buffer = new byte[81920];
             long totalRead = 0;
             int bytesRead;
+            int lastReportedPercent = -1;
 
             while ((bytesRead = await stream.ReadAsync(buffer)) > 0)
             {
@@ -118,8 +131,13 @@ public class UpdateService
 
                 if (totalBytes > 0)
                 {
-                    DownloadProgress = (int)(totalRead * 100 / totalBytes);
-                    UpdateStatusChanged?.Invoke();
+                    var percent = (int)(totalRead * 100 / totalBytes);
+                    if (percent != lastReportedPercent)
+                    {
+                        lastReportedPercent = percent;
+                        DownloadProgress = percent;
+                        UpdateStatusChanged?.Invoke();
+                    }
                 }
             }
 
@@ -132,6 +150,7 @@ public class UpdateService
         catch
         {
             IsDownloading = false;
+            DownloadFailed = true;
             UpdateStatusChanged?.Invoke();
         }
     }

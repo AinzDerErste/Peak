@@ -33,9 +33,7 @@ public partial class SettingsWindow : Window
     private readonly Dictionary<string, CheckBox> _pluginEnabledChecks = new();
     private readonly HashSet<string> _initialDisabledPlugins = new();
 
-    // Update service subscription (needs unsubscribe on close to avoid leaks)
     private UpdateService? _updateService;
-    private Action? _updateHandler;
 
     public SettingsWindow(SettingsManager settingsManager)
     {
@@ -47,18 +45,22 @@ public partial class SettingsWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
-        if (_updateService != null && _updateHandler != null)
-            _updateService.UpdateStatusChanged -= _updateHandler;
+        if (_updateService != null)
+            _updateService.UpdateStatusChanged -= OnUpdateStatusChanged;
+    }
+
+    private void OnUpdateStatusChanged()
+    {
+        // Raised from the download thread — marshal to UI without blocking the caller.
+        Dispatcher.BeginInvoke(() => RefreshUpdateUI(_updateService!));
     }
 
     private void LoadSettings()
     {
-        // About + subscribe to live update status
         VersionText.Text = $"v{UpdateService.CurrentVersion}";
         _updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
+        _updateService.UpdateStatusChanged += OnUpdateStatusChanged;
         RefreshUpdateUI(_updateService);
-        _updateHandler = () => Dispatcher.Invoke(() => RefreshUpdateUI(_updateService!));
-        _updateService.UpdateStatusChanged += _updateHandler;
 
         var s = _settingsManager.Settings;
         AlwaysVisibleCheck.IsChecked = s.Behavior == IslandBehavior.AlwaysVisible;
@@ -648,50 +650,44 @@ public partial class SettingsWindow : Window
             SensitivityLabel.Text = $"{(int)e.NewValue}%";
     }
 
+    private void SetUpdateStatus(string text, string brushKey, bool showInstallButton)
+    {
+        UpdateStatusText.Text = text;
+        UpdateStatusText.Foreground = (Brush)FindResource(brushKey);
+        InstallUpdateButton.Visibility = showInstallButton ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void RefreshUpdateUI(UpdateService svc)
     {
         if (svc.IsDownloaded)
-        {
-            UpdateStatusText.Text = $"v{svc.NewVersion} ready to install!";
-            UpdateStatusText.Foreground = (Brush)FindResource("AccentBrush");
-            InstallUpdateButton.Visibility = Visibility.Visible;
-            CheckUpdateButton.Content = "Check for Updates";
-            CheckUpdateButton.IsEnabled = true;
-        }
+            SetUpdateStatus($"v{svc.NewVersion} ready to install!", "AccentBrush", true);
         else if (svc.IsDownloading)
-        {
-            UpdateStatusText.Text = $"Downloading v{svc.NewVersion}... {svc.DownloadProgress}%";
-            UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
-            InstallUpdateButton.Visibility = Visibility.Collapsed;
-        }
+            SetUpdateStatus($"Downloading v{svc.NewVersion}... {svc.DownloadProgress}%", "TextDim", false);
+        else if (svc.DownloadFailed)
+            SetUpdateStatus($"v{svc.NewVersion} download failed. Click again to retry.", "TextDim", false);
         else if (svc.UpdateAvailable)
-        {
-            UpdateStatusText.Text = $"v{svc.NewVersion} available";
-            UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
-            InstallUpdateButton.Visibility = Visibility.Collapsed;
-        }
+            SetUpdateStatus($"v{svc.NewVersion} available", "TextDim", false);
+        else
+            SetUpdateStatus("", "TextDim", false);
     }
 
     private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
     {
+        if (_updateService == null) return;
+
         CheckUpdateButton.IsEnabled = false;
-        UpdateStatusText.Text = "Checking...";
-        UpdateStatusText.Foreground = (Brush)FindResource("TextDim");
+        SetUpdateStatus("Checking...", "TextDim", false);
 
         try
         {
-            var updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
-            await updateService.CheckForUpdateAsync();
+            await _updateService.CheckForUpdateAsync();
 
-            if (!updateService.UpdateAvailable)
-            {
-                UpdateStatusText.Text = "You're up to date!";
-            }
-            // RefreshUpdateUI handles the rest via UpdateStatusChanged
+            if (!_updateService.UpdateAvailable)
+                SetUpdateStatus("You're up to date!", "TextDim", false);
         }
         catch
         {
-            UpdateStatusText.Text = "Check failed.";
+            SetUpdateStatus("Check failed.", "TextDim", false);
         }
 
         CheckUpdateButton.IsEnabled = true;
@@ -699,8 +695,8 @@ public partial class SettingsWindow : Window
 
     private void OnInstallUpdateClick(object sender, RoutedEventArgs e)
     {
-        var updateService = ((App)Application.Current).Services.GetRequiredService<UpdateService>();
-        updateService.InstallUpdate();
+        if (_updateService == null) return;
+        _updateService.InstallUpdate();
         Application.Current.Shutdown();
     }
 
