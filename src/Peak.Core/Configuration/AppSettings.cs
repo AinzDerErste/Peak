@@ -46,7 +46,8 @@ public enum CollapsedWidget
     WeatherIcon,   // Icon only
     Date,
     MediaTitle,
-    DiscordCallCount
+    DiscordCallCount,
+    TeamSpeakCallCount
 }
 
 public class AppSettings

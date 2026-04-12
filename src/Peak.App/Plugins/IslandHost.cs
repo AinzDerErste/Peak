@@ -42,6 +42,10 @@ public class IslandHost : IIslandHost
         UiDispatcher.Invoke(() => _window.SetVisualizerOverride(content));
     }
 
+    /// <summary>Maps each SDK renderer delegate to its wrapped Core-side delegate for list management.</summary>
+    private readonly Dictionary<Func<CollapsedWidgetKind, FrameworkElement?>, Func<CollapsedWidget, FrameworkElement?>>
+        _rendererMap = new();
+
     public void SetCollapsedRenderer(Func<CollapsedWidgetKind, FrameworkElement?>? renderer)
     {
         if (_window == null) return;
@@ -50,16 +54,27 @@ public class IslandHost : IIslandHost
         {
             if (renderer == null)
             {
-                _window.ExternalCollapsedRenderer = null;
+                // Plugin detaching — the renderer's closure will return null naturally
+                // since the plugin clears its internal state, so no action needed.
+                _window.RenderCollapsedSlots();
+                return;
             }
-            else
+
+            // If this exact renderer is already registered, skip
+            if (_rendererMap.ContainsKey(renderer))
             {
-                _window.ExternalCollapsedRenderer = w =>
-                {
-                    var kind = (CollapsedWidgetKind)(int)w;
-                    return renderer(kind);
-                };
+                _window.RenderCollapsedSlots();
+                return;
             }
+
+            // Wrap SDK enum → Core enum and register
+            Func<CollapsedWidget, FrameworkElement?> wrapped = w =>
+            {
+                var kind = (CollapsedWidgetKind)(int)w;
+                return renderer(kind);
+            };
+            _rendererMap[renderer] = wrapped;
+            _window.ExternalCollapsedRenderers.Add(wrapped);
             _window.RenderCollapsedSlots();
         });
     }

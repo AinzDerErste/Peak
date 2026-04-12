@@ -9,6 +9,7 @@
 
 #define PublishDir "..\src\Peak.App\bin\Release\net8.0-windows10.0.22621.0\publish"
 #define DiscordPluginDir "..\src\Peak.Plugins.Discord\bin\Release\net8.0-windows10.0.22621.0"
+#define TeamSpeakPluginDir "..\src\Peak.Plugins.TeamSpeak\bin\Release\net8.0-windows10.0.22621.0"
 #define IconFile "..\src\Peak.App\Assets\app-icon.ico"
 
 [Setup]
@@ -39,12 +40,15 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "autostart"; Description: "Start Peak with Windows"; GroupDescription: "Additional options:"
 Name: "discord"; Description: "Install Discord plugin (voice call integration)"; GroupDescription: "Plugins:"
+Name: "teamspeak"; Description: "Install TeamSpeak 6 plugin (voice channel display)"; GroupDescription: "Plugins:"
 
 [Files]
 ; Main application
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Discord plugin → %APPDATA%\Peak\plugins\discord\
 Source: "{#DiscordPluginDir}\Peak.Plugins.Discord.dll"; DestDir: "{userappdata}\Peak\plugins\discord"; Flags: ignoreversion; Tasks: discord
+; TeamSpeak plugin → %APPDATA%\Peak\plugins\teamspeak\
+Source: "{#TeamSpeakPluginDir}\Peak.Plugins.TeamSpeak.dll"; DestDir: "{userappdata}\Peak\plugins\teamspeak"; Flags: ignoreversion; Tasks: teamspeak
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -66,6 +70,7 @@ Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; Ru
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{userappdata}\Peak\plugins\discord"
+Type: filesandordirs; Name: "{userappdata}\Peak\plugins\teamspeak"
 
 [Code]
 function IsDotNet8Installed(): Boolean;

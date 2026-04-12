@@ -77,7 +77,8 @@ public partial class IslandWindow : Window
     private UIElement? _visualizerOverride;
 
     // Plugin extension points
-    public Func<CollapsedWidget, FrameworkElement?>? ExternalCollapsedRenderer { get; set; }
+    /// <summary>Plugin collapsed-slot renderers. Each renderer is tried in order; first non-null wins.</summary>
+    public List<Func<CollapsedWidget, FrameworkElement?>> ExternalCollapsedRenderers { get; } = new();
 
     // Unhide greeting messages (keep short — must fit ~200px)
     private static readonly string[] _greetings =
@@ -907,8 +908,12 @@ public partial class IslandWindow : Window
     private FrameworkElement? CreateCollapsedWidget(CollapsedWidget type)
     {
         // Give plugins first chance to render this collapsed widget
-        var pluginContent = ExternalCollapsedRenderer?.Invoke(type);
-        if (pluginContent != null) return pluginContent;
+        // Give plugins first chance to render this collapsed widget
+        foreach (var renderer in ExternalCollapsedRenderers)
+        {
+            var pluginContent = renderer(type);
+            if (pluginContent != null) return pluginContent;
+        }
 
         switch (type)
         {
@@ -947,7 +952,7 @@ public partial class IslandWindow : Window
                 media.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("MediaTitle"));
                 return media;
 
-            // DiscordCallCount is handled entirely by the plugin renderer.
+            // DiscordCallCount and TeamSpeakCallCount are handled entirely by plugin renderers.
             // If the plugin returns null (not in a call), the slot stays empty.
 
             default:

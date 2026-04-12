@@ -64,5 +64,6 @@ public enum CollapsedWidgetKind
     WeatherIcon = 4,
     Date = 5,
     MediaTitle = 6,
-    DiscordCallCount = 7
+    DiscordCallCount = 7,
+    TeamSpeakCallCount = 8
 }

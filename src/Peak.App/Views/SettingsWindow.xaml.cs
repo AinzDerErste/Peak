@@ -308,6 +308,7 @@ public partial class SettingsWindow : Window
         (CollapsedWidget.Date, "Date"),
         (CollapsedWidget.MediaTitle, "Media Title"),
         (CollapsedWidget.DiscordCallCount, "Discord Call Count"),
+        (CollapsedWidget.TeamSpeakCallCount, "TeamSpeak Call Count"),
     ];
 
     private void LoadCollapsedCombos(CollapsedWidget[] slots)

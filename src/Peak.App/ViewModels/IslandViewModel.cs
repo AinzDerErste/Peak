@@ -75,6 +75,10 @@ public partial class IslandViewModel : ObservableObject
     [ObservableProperty] private int _discordCallCount;
     [ObservableProperty] private string _discordCallCountDisplay = "—";
 
+    // TeamSpeak (set by plugin)
+    [ObservableProperty] private int _teamSpeakCallCount;
+    [ObservableProperty] private string _teamSpeakCallCountDisplay = "";
+
     // SVG Icon helpers
     public Geometry? PlayPauseIcon => IsPlaying
         ? (Geometry?)Application.Current?.TryFindResource("IconPause")
