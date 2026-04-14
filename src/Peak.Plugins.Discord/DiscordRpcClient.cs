@@ -47,10 +47,6 @@ public class DiscordRpcClient : IDisposable
     public event Action? ParticipantsChanged;
     public event Action<string, bool>? SpeakingChanged;
     public event Action<string>? TokenRefreshed;
-    /// <summary>Fired when an incoming call notification is detected. Args: callerId, callerName, callerAvatar, channelId.</summary>
-    public event Action<string, string, string?, string>? IncomingCallDetected;
-    /// <summary>Fired when the incoming call notification is dismissed (e.g. caller hung up, timeout).</summary>
-    public event Action? IncomingCallDismissed;
 
     public DiscordRpcClient(string clientId, string? clientSecret = null)
     {
@@ -155,7 +151,7 @@ public class DiscordRpcClient : IDisposable
         var authArgs = new JsonObject
         {
             ["client_id"] = _clientId,
-            ["scopes"] = new JsonArray("rpc", "rpc.voice.read", "rpc.notifications.read", "identify")
+            ["scopes"] = new JsonArray("rpc", "rpc.voice.read", "identify")
         };
         DiscordLog.Write("AuthenticateAsync: sending AUTHORIZE command, waiting for user consent in Discord…");
         JsonNode? codeResp;
@@ -244,34 +240,6 @@ public class DiscordRpcClient : IDisposable
         catch (Exception ex)
         {
             DiscordLog.Write($"SubscribeChannelEventsAsync failed: {ex.Message}");
-        }
-    }
-
-    public async Task SubscribeNotificationEventsAsync(CancellationToken ct = default)
-    {
-        DiscordLog.Write("SubscribeNotificationEventsAsync: subscribing to NOTIFICATION_CREATE…");
-        try
-        {
-            await SendCommandAsync("SUBSCRIBE", new JsonObject(), ct, evt: "NOTIFICATION_CREATE", timeoutMs: 5000).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            DiscordLog.Write($"SubscribeNotificationEventsAsync failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>Accepts an incoming call by selecting the voice channel.</summary>
-    public async Task AcceptCallAsync(string channelId, CancellationToken ct = default)
-    {
-        DiscordLog.Write($"AcceptCallAsync: selecting channel {channelId}");
-        try
-        {
-            var args = new JsonObject { ["channel_id"] = channelId };
-            await SendCommandAsync("SELECT_VOICE_CHANNEL", args, ct, timeoutMs: 10000).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            DiscordLog.Write($"AcceptCallAsync failed: {ex.Message}");
         }
     }
 
@@ -435,7 +403,6 @@ public class DiscordRpcClient : IDisposable
             }
             // kick off subscriptions once authenticated
             _ = SubscribeVoiceEventsAsync();
-            _ = SubscribeNotificationEventsAsync();
         }
         else if (cmd == "GET_SELECTED_VOICE_CHANNEL")
         {
@@ -480,51 +447,6 @@ public class DiscordRpcClient : IDisposable
             var uid = data?["user_id"]?.GetValue<string>();
             if (!string.IsNullOrEmpty(uid)) SpeakingChanged?.Invoke(uid, false);
         }
-        else if (cmd == "DISPATCH" && evt == "NOTIFICATION_CREATE")
-        {
-            HandleNotification(data);
-        }
-    }
-
-    private void HandleNotification(JsonNode? data)
-    {
-        // message type 3 = call
-        var message = data?["message"];
-        var typeVal = message?["type"];
-        int msgType = -1;
-        if (typeVal != null)
-        {
-            try { msgType = typeVal.GetValue<int>(); }
-            catch { try { msgType = int.Parse(typeVal.GetValue<string>()); } catch { } }
-        }
-
-        DiscordLog.Write($"NOTIFICATION_CREATE: message type={msgType}");
-
-        if (msgType != 3) return; // Not a call notification
-
-        var channelId = data?["channel_id"]?.GetValue<string>();
-        var author = message?["author"];
-        var callerId = author?["id"]?.GetValue<string>();
-        var callerName = author?["username"]?.GetValue<string>()
-                      ?? author?["global_name"]?.GetValue<string>()
-                      ?? "Unknown";
-        var callerAvatar = author?["avatar"]?.GetValue<string>();
-
-        if (string.IsNullOrEmpty(channelId) || string.IsNullOrEmpty(callerId))
-        {
-            DiscordLog.Write("NOTIFICATION_CREATE: missing channelId or callerId, ignoring.");
-            return;
-        }
-
-        // Don't fire if we're already in a voice channel
-        if (!string.IsNullOrEmpty(CurrentChannelId))
-        {
-            DiscordLog.Write("NOTIFICATION_CREATE: already in a voice channel, ignoring call.");
-            return;
-        }
-
-        DiscordLog.Write($"Incoming call from {callerName} ({callerId}) on channel {channelId}");
-        IncomingCallDetected?.Invoke(callerId, callerName, callerAvatar, channelId);
     }
 
     private void HandleVoiceChannel(JsonNode? data)
