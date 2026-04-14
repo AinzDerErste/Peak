@@ -103,6 +103,17 @@ public class IslandHost : IIslandHost
         }
     }
 
+    public void SetExpansionBlocked(bool blocked)
+    {
+        UiDispatcher.Invoke(() => _viewModel.ExpansionBlocked = blocked);
+    }
+
+    public void SetCollapsedOverlay(UIElement? overlay)
+    {
+        if (_window == null) return;
+        UiDispatcher.Invoke(() => _window.SetCollapsedOverlay(overlay));
+    }
+
     public void SetViewModelProperty(string propertyName, object? value)
     {
         UiDispatcher.Invoke(() =>

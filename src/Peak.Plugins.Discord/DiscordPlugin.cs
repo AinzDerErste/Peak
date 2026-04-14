@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Peak.Plugin.Sdk;
@@ -20,6 +21,10 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
     private IIslandHost? _host;
     private CancellationTokenSource? _reconnectCts;
     private readonly HashSet<string> _speakingNow = new();
+
+    // Incoming call state
+    private string? _incomingCallChannelId;
+    private CancellationTokenSource? _callDismissCts;
 
     public void Initialize(IServiceProvider services)
     {
@@ -116,7 +121,7 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
         // Register collapsed renderer for the DiscordCallCount slot
         host.SetCollapsedRenderer(kind =>
         {
-            if (kind != CollapsedWidgetKind.DiscordCallCount) return null;
+            if (kind != CollapsedWidgetKind.DiscordCallCount && kind != CollapsedWidgetKind.VoiceCallCount) return null;
             // Only render when actively in a call with participants
             if (_rpc == null || string.IsNullOrEmpty(_rpc.CurrentChannelId)) return null;
             if (_rpc.Participants.Count == 0) return null;
@@ -161,6 +166,8 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
                 _rpc.ParticipantsChanged += OnParticipantsChanged;
                 _rpc.SpeakingChanged += OnSpeakingChanged;
                 _rpc.TokenRefreshed += OnTokenRefreshed;
+                _rpc.IncomingCallDetected += OnIncomingCall;
+                _rpc.IncomingCallDismissed += OnIncomingCallDismissed;
 
                 if (await _rpc.ConnectAsync(ct).ConfigureAwait(false))
                 {
@@ -207,6 +214,11 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
     {
         if (_rpc == null) return;
         _speakingNow.Clear();
+
+        // If we joined a channel, dismiss any active incoming call overlay
+        if (!string.IsNullOrEmpty(_rpc.CurrentChannelId))
+            DismissCallOverlay();
+
         if (string.IsNullOrEmpty(_rpc.CurrentChannelId))
         {
             // Left a call → drop the override entirely, back to the audio visualizer.
@@ -334,6 +346,162 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
             _host?.SetVisualizerOverride(ellipse);
         });
     }
+
+    // ─── Incoming Call ───────────────────────────────────────
+
+    // FontAwesome Free – phone-slash solid, viewBox 0 0 640 512
+    private const string PhoneSlashPath =
+        "M228.9 24.6c-7.7-18.6-28-28.5-47.4-23.2l-88 24C76.1 30.2 64 46 64 64" +
+        "c0 28.4 2.8 56.2 8.2 83L38.6 118.7c-12.5-12.5-32.8-12.5-45.3 0" +
+        "s-12.5 32.8 0 45.3l544 544c12.5 12.5 32.8 12.5 45.3 0" +
+        "s12.5-32.8 0-45.3L380.2 485.2C432.1 478.5 481.5 463.6 527.2 441.8" +
+        "l-49.6-49.6c-39.8 20.4-83.3 33.8-129.2 39.1L257.3 339.2" +
+        "c13.7-11.2 18.4-30 11.6-46.3l-40-96zM383.4 299.6L129.3 45.5" +
+        "l.3-.2 39.3 94.3 40 96c6.8 16.3 2.1 35.2-11.6 46.3l-49.3 40.1" +
+        "C177.3 391.7 234.3 448.7 304.7 483l39.6-40.4c13.7-11.1 30-14.4 46.3-7.6" +
+        "l-7.2-135.4z";
+
+    private void OnIncomingCall(string callerId, string callerName, string? callerAvatar, string channelId)
+    {
+        if (_host == null) return;
+        _incomingCallChannelId = channelId;
+
+        _host.UiDispatcher.Invoke(() =>
+        {
+            var overlay = BuildCallOverlay(callerId, callerName, callerAvatar, channelId);
+            _host.SetCollapsedOverlay(overlay);
+            _host.SetExpansionBlocked(true);
+        });
+
+        // Auto-dismiss after 30 seconds
+        _callDismissCts?.Cancel();
+        _callDismissCts = new CancellationTokenSource();
+        var ct = _callDismissCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+                DismissCallOverlay();
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void OnIncomingCallDismissed()
+    {
+        DismissCallOverlay();
+    }
+
+    private void DismissCallOverlay()
+    {
+        _callDismissCts?.Cancel();
+        _incomingCallChannelId = null;
+        _host?.UiDispatcher.Invoke(() =>
+        {
+            _host?.SetCollapsedOverlay(null);
+            _host?.SetExpansionBlocked(false);
+        });
+    }
+
+    private UIElement BuildCallOverlay(string callerId, string callerName, string? callerAvatar, string channelId)
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        // Caller name
+        var nameText = new TextBlock
+        {
+            Text = callerName,
+            Foreground = Brushes.White,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            MaxWidth = 90,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+
+        // "calling..." label
+        var callingText = new TextBlock
+        {
+            Text = "ruft an",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+
+        // Accept button (green phone)
+        var acceptBtn = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x3B, 0xA5, 0x5C)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 3, 6, 3),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Margin = new Thickness(0, 0, 4, 0),
+            Child = new Viewbox
+            {
+                Width = 12, Height = 12,
+                Child = new Canvas
+                {
+                    Width = 512, Height = 512,
+                    Children = { new System.Windows.Shapes.Path
+                    {
+                        Data = Geometry.Parse(PhonePath),
+                        Fill = Brushes.White,
+                        Stretch = Stretch.Uniform
+                    }}
+                }
+            }
+        };
+        acceptBtn.MouseLeftButtonUp += (_, _) =>
+        {
+            if (_rpc != null && !string.IsNullOrEmpty(channelId))
+                _ = _rpc.AcceptCallAsync(channelId);
+            DismissCallOverlay();
+        };
+
+        // Decline button (red phone-slash)
+        var declineBtn = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0xED, 0x42, 0x45)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 3, 6, 3),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Child = new Viewbox
+            {
+                Width = 12, Height = 12,
+                Child = new Canvas
+                {
+                    Width = 640, Height = 512,
+                    Children = { new System.Windows.Shapes.Path
+                    {
+                        Data = Geometry.Parse(PhoneSlashPath),
+                        Fill = Brushes.White,
+                        Stretch = Stretch.Uniform
+                    }}
+                }
+            }
+        };
+        declineBtn.MouseLeftButtonUp += (_, _) =>
+        {
+            DismissCallOverlay();
+        };
+
+        panel.Children.Add(nameText);
+        panel.Children.Add(callingText);
+        panel.Children.Add(acceptBtn);
+        panel.Children.Add(declineBtn);
+
+        return panel;
+    }
+
+    // ─── Collapsed Widget ───────────────────────────────────
 
     private FrameworkElement BuildCallCountUi()
     {
