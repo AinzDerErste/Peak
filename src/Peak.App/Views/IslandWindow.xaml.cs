@@ -75,6 +75,7 @@ public partial class IslandWindow : Window
     private readonly Rectangle[] _vizBarsRight = new Rectangle[AudioVisualizerService.BarCount];
     private bool _visualizerRunning;
     private UIElement? _visualizerOverride;
+    private UIElement? _collapsedOverlay;
 
     // Plugin extension points
     /// <summary>Plugin collapsed-slot renderers. Each renderer is tried in order; first non-null wins.</summary>
@@ -701,6 +702,10 @@ public partial class IslandWindow : Window
         if (_viewModel.CurrentState == IslandState.Hidden)
             return; // Hidden state is only toggled via hotkey
 
+        // Plugin overlay active (e.g. incoming call) — don't expand
+        if (_viewModel.ExpansionBlocked)
+            return;
+
         // While a notification is being peeked, let the user interact with the Peek
         // (left-click open, right-click dismiss) instead of auto-expanding. Pause
         // the auto-collapse timer while the mouse is over the island.
@@ -851,6 +856,7 @@ public partial class IslandWindow : Window
         if (_viewModel.IsEditMode) { StopMousePolling(); return; }
         if (_viewModel.CurrentState == IslandState.Hidden) { StopMousePolling(); return; }
         if (_isDragging || _isWidgetDragging) { StopMousePolling(); return; }
+        if (_viewModel.ExpansionBlocked) { StopMousePolling(); return; }
 
         if (IsMouseOverIsland())
         {
@@ -907,7 +913,37 @@ public partial class IslandWindow : Window
 
     private FrameworkElement? CreateCollapsedWidget(CollapsedWidget type)
     {
-        // Give plugins first chance to render this collapsed widget
+        // VoiceCallCount: combine ALL plugin renderers that return content
+        if (type == CollapsedWidget.VoiceCallCount)
+        {
+            var parts = new List<FrameworkElement>();
+            foreach (var renderer in ExternalCollapsedRenderers)
+            {
+                var content = renderer(type);
+                if (content != null) parts.Add(content);
+            }
+            if (parts.Count == 0) return null;
+            if (parts.Count == 1) return parts[0];
+
+            // Multiple active voice apps — combine with a separator dot
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (i > 0)
+                {
+                    panel.Children.Add(new System.Windows.Shapes.Ellipse
+                    {
+                        Width = 3, Height = 3,
+                        Fill = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                        Margin = new Thickness(6, 0, 6, 0),
+                        VerticalAlignment = VerticalAlignment.Center
+                    });
+                }
+                panel.Children.Add(parts[i]);
+            }
+            return panel;
+        }
+
         // Give plugins first chance to render this collapsed widget
         foreach (var renderer in ExternalCollapsedRenderers)
         {
@@ -1039,6 +1075,48 @@ public partial class IslandWindow : Window
     }
 
     private SizeChangedEventHandler? _overrideSizeHandler;
+
+    // ─── Collapsed Overlay (Plugin Hook) ─────────────────────────
+
+    public void SetCollapsedOverlay(UIElement? overlay)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => SetCollapsedOverlay(overlay));
+            return;
+        }
+
+        // Remove previous overlay from the grid
+        if (_collapsedOverlay != null)
+        {
+            var parent = VisualTreeHelper.GetParent(_collapsedOverlay) as Grid;
+            parent?.Children.Remove(_collapsedOverlay);
+        }
+
+        _collapsedOverlay = overlay;
+
+        if (overlay != null)
+        {
+            // Hide normal collapsed content, show overlay in same grid
+            CollapsedContent.Visibility = Visibility.Collapsed;
+
+            if (overlay is FrameworkElement fe)
+            {
+                fe.HorizontalAlignment = HorizontalAlignment.Center;
+                fe.VerticalAlignment = VerticalAlignment.Center;
+            }
+
+            // Add overlay to the same Grid that holds CollapsedContent
+            var grid = (Grid)CollapsedContent.Parent;
+            grid.Children.Add(overlay);
+        }
+        else
+        {
+            // Restore normal collapsed content
+            if (_currentAnimatedState is IslandState.Collapsed or IslandState.Hidden)
+                CollapsedContent.Visibility = Visibility.Visible;
+        }
+    }
 
     // ─── ViewModel Property Changes ──────────────────────────────
 
@@ -1329,10 +1407,10 @@ public partial class IslandWindow : Window
 
         var activeContent = state switch
         {
-            IslandState.Collapsed => (UIElement)CollapsedContent,
+            IslandState.Collapsed => _collapsedOverlay ?? (UIElement)CollapsedContent,
             IslandState.Peek => PeekContent,
             IslandState.Expanded => ExpandedContent,
-            _ => CollapsedContent
+            _ => _collapsedOverlay ?? (UIElement)CollapsedContent
         };
 
         // Start content fade-in at 60% of scale duration (parallel, not sequential)
@@ -1363,7 +1441,11 @@ public partial class IslandWindow : Window
     private void SetContentVisibility(IslandState state)
     {
         // Hidden uses CollapsedContent (same visual, just translated up)
-        CollapsedContent.Visibility = state is IslandState.Collapsed or IslandState.Hidden ? Visibility.Visible : Visibility.Collapsed;
+        // If an overlay is active, keep CollapsedContent hidden — the overlay replaces it
+        var showCollapsed = state is IslandState.Collapsed or IslandState.Hidden;
+        CollapsedContent.Visibility = showCollapsed && _collapsedOverlay == null ? Visibility.Visible : Visibility.Collapsed;
+        if (_collapsedOverlay != null)
+            _collapsedOverlay.Visibility = showCollapsed ? Visibility.Visible : Visibility.Collapsed;
         PeekContent.Visibility = state == IslandState.Peek ? Visibility.Visible : Visibility.Collapsed;
         ExpandedContent.Visibility = state == IslandState.Expanded ? Visibility.Visible : Visibility.Collapsed;
     }

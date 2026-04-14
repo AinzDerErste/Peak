@@ -49,6 +49,19 @@ public interface IIslandHost
     /// outside of the Settings UI (e.g. an OAuth token refresh).
     /// </summary>
     void RequestSettingsSave();
+
+    /// <summary>
+    /// Block or unblock mouse-triggered expansion of the island.
+    /// Use during plugin overlays (e.g. incoming call) that should prevent
+    /// the island from expanding when clicked.
+    /// </summary>
+    void SetExpansionBlocked(bool blocked);
+
+    /// <summary>
+    /// Show a full-width overlay on top of the collapsed island slots.
+    /// Pass null to remove the overlay and restore normal collapsed content.
+    /// </summary>
+    void SetCollapsedOverlay(UIElement? overlay);
 }
 
 /// <summary>
@@ -65,5 +78,6 @@ public enum CollapsedWidgetKind
     Date = 5,
     MediaTitle = 6,
     DiscordCallCount = 7,
-    TeamSpeakCallCount = 8
+    TeamSpeakCallCount = 8,
+    VoiceCallCount = 9
 }

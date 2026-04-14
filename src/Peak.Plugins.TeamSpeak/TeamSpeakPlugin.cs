@@ -110,7 +110,7 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         // Register collapsed renderer for the TeamSpeakCallCount slot
         host.SetCollapsedRenderer(kind =>
         {
-            if (kind != CollapsedWidgetKind.TeamSpeakCallCount) return null;
+            if (kind != CollapsedWidgetKind.TeamSpeakCallCount && kind != CollapsedWidgetKind.VoiceCallCount) return null;
             if (_client == null || string.IsNullOrEmpty(_client.CurrentChannelId)) return null;
             if (_client.Participants.Count == 0) return null;
             return BuildCallCountUi();
@@ -203,6 +203,11 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
     private void OnDisconnected()
     {
         _speakingNow.Clear();
+        // Clear client state so collapsed renderer won't show stale data
+        if (_client != null)
+        {
+            _client.Participants.Clear();
+        }
         _host?.SetViewModelProperty("TeamSpeakCallCount", 0);
         _host?.SetViewModelProperty("TeamSpeakCallCountDisplay", "");
         _host?.SetVisualizerOverride(null);

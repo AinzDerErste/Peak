@@ -47,7 +47,8 @@ public enum CollapsedWidget
     Date,
     MediaTitle,
     DiscordCallCount,
-    TeamSpeakCallCount
+    TeamSpeakCallCount,
+    VoiceCallCount // Combined: shows whichever voice app is active (Discord / TeamSpeak / both)
 }
 
 public class AppSettings

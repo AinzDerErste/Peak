@@ -79,6 +79,9 @@ public partial class IslandViewModel : ObservableObject
     [ObservableProperty] private int _teamSpeakCallCount;
     [ObservableProperty] private string _teamSpeakCallCountDisplay = "";
 
+    // Plugin interaction lock (e.g. incoming call overlay)
+    [ObservableProperty] private bool _expansionBlocked;
+
     // SVG Icon helpers
     public Geometry? PlayPauseIcon => IsPlaying
         ? (Geometry?)Application.Current?.TryFindResource("IconPause")
