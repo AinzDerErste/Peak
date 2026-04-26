@@ -1,0 +1,34 @@
+# Top-most EditorConfig file
+root = true
+
+# Default for all files
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# C#
+[*.cs]
+indent_size = 4
+
+# Roslyn analyzer rules
+dotnet_style_namespace_match_folder = true:warning
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_property = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_event = false:silent
+
+# Unused usings — flag as warning
+dotnet_diagnostic.IDE0005.severity = warning
+
+# XAML, JSON, project files use 2-space indent
+[*.{xml,xaml,json,csproj,props,targets}]
+indent_size = 2
+
+# Markdown — preserve trailing whitespace (line breaks)
+[*.md]
+trim_trailing_whitespace = false

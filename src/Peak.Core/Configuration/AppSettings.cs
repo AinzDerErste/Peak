@@ -72,15 +72,6 @@ public class AppSettings
     // Quick Access: pinned file/folder paths
     public string[] QuickAccessPaths { get; set; } = [];
 
-    // Legacy toggles (kept for backward compat)
-    public bool ShowClock { get; set; } = true;
-    public bool ShowMedia { get; set; } = true;
-    public bool ShowSystemMonitor { get; set; } = true;
-    public bool ShowWeather { get; set; } = true;
-    public bool ShowCalendar { get; set; } = true;
-    public bool ShowNotifications { get; set; } = true;
-    public bool ShowTimer { get; set; } = true;
-
     // Appearance
     public bool ShowBorder { get; set; } = true;
     public string IslandBackground { get; set; } = "#FF000000";
@@ -126,7 +117,4 @@ public class AppSettings
     // Default = empty → all discovered plugins are loaded.
     public HashSet<string> DisabledPlugins { get; set; } = new();
 
-    // String-based slot IDs for plugin widget support
-    // When non-empty, takes precedence over WidgetSlots (enum-based)
-    public string[] WidgetSlotIds { get; set; } = [];
 }

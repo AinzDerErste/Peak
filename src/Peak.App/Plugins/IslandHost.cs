@@ -1,11 +1,11 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using Peak.App.ViewModels;
 using Peak.App.Views;
 using Peak.Core.Configuration;
 using Peak.Core.Plugins;
-using Peak.Core.Services;
 using Peak.Plugin.Sdk;
 
 namespace Peak.App.Plugins;
@@ -18,12 +18,14 @@ public class IslandHost : IIslandHost
 {
     private readonly IslandViewModel _viewModel;
     private readonly SettingsManager _settingsManager;
+    private readonly ILogger<IslandHost> _logger;
     private IslandWindow? _window;
 
-    public IslandHost(IslandViewModel viewModel, SettingsManager settingsManager)
+    public IslandHost(IslandViewModel viewModel, SettingsManager settingsManager, ILogger<IslandHost> logger)
     {
         _viewModel = viewModel;
         _settingsManager = settingsManager;
+        _logger = logger;
     }
 
     /// <summary>Set by App.xaml.cs after plugin loading.</summary>
@@ -99,7 +101,7 @@ public class IslandHost : IIslandHost
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"RequestSettingsSave failed: {ex.Message}");
+            _logger.LogWarning(ex, "RequestSettingsSave failed");
         }
     }
 
@@ -132,7 +134,7 @@ public class IslandHost : IIslandHost
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"SetViewModelProperty({propertyName}) failed: {ex.Message}");
+                _logger.LogWarning(ex, "SetViewModelProperty({PropertyName}) failed", propertyName);
             }
         });
     }

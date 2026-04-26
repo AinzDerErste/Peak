@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Peak.Core.Plugins;
 
@@ -11,13 +12,15 @@ namespace Peak.Core.Plugins;
 public class PluginLoader : IDisposable
 {
     private readonly string _pluginsDir;
+    private readonly ILogger<PluginLoader>? _logger;
     private readonly List<PluginContext> _contexts = new();
 
     public IReadOnlyList<LoadedPlugin> LoadedPlugins { get; private set; } = [];
 
-    public PluginLoader(string pluginsDir)
+    public PluginLoader(string pluginsDir, ILogger<PluginLoader>? logger = null)
     {
         _pluginsDir = pluginsDir;
+        _logger = logger;
         Directory.CreateDirectory(_pluginsDir);
     }
 
@@ -47,7 +50,7 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to load plugin from {pluginDir}: {ex.Message}");
+                _logger?.LogWarning(ex, "Failed to load plugin from {PluginDir}", pluginDir);
             }
         }
 
@@ -163,7 +166,7 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to instantiate plugin {type.FullName}: {ex.Message}");
+                _logger?.LogWarning(ex, "Failed to instantiate plugin {TypeName}", type.FullName);
             }
         }
 
@@ -191,7 +194,7 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"AttachToIsland failed for {plugin.Id}: {ex.Message}");
+                _logger?.LogWarning(ex, "AttachToIsland failed for {PluginId}", plugin.Id);
             }
         }
     }
@@ -236,7 +239,7 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"GetSettingsSchema failed for {plugin.Id}: {ex.Message}");
+                _logger?.LogWarning(ex, "GetSettingsSchema failed for {PluginId}", plugin.Id);
             }
         }
         return list;
@@ -274,7 +277,7 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"CollectAllSettings: {plugin.Id}: {ex.Message}");
+                _logger?.LogWarning(ex, "CollectAllSettings failed for {PluginId}", plugin.Id);
             }
         }
         return result;

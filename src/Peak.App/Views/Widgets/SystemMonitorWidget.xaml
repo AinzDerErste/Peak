@@ -12,8 +12,8 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="CPU" Foreground="#99FFFFFF" FontSize="11" VerticalAlignment="Center" />
             <ProgressBar Grid.Column="1" Value="{Binding CpuUsage}" Maximum="100"
-                         Width="60" Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
-                         VerticalAlignment="Center" />
+                         Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
+                         HorizontalAlignment="Stretch" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" Text="{Binding CpuUsage, StringFormat={}{0:F0}%}"
                        Foreground="#AAFFFFFF" FontSize="10" Margin="6,0,0,0"
                        VerticalAlignment="Center" Width="28" />
@@ -27,9 +27,24 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="RAM" Foreground="#99FFFFFF" FontSize="11" VerticalAlignment="Center" />
             <ProgressBar Grid.Column="1" Value="{Binding MemoryUsage}" Maximum="100"
-                         Width="60" Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
-                         VerticalAlignment="Center" />
+                         Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
+                         HorizontalAlignment="Stretch" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" Text="{Binding MemoryUsage, StringFormat={}{0:F0}%}"
+                       Foreground="#AAFFFFFF" FontSize="10" Margin="6,0,0,0"
+                       VerticalAlignment="Center" Width="28" />
+        </Grid>
+        <!-- GPU -->
+        <Grid Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="32" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="GPU" Foreground="#99FFFFFF" FontSize="11" VerticalAlignment="Center" />
+            <ProgressBar Grid.Column="1" Value="{Binding GpuUsage}" Maximum="100"
+                         Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
+                         HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="{Binding GpuUsage, StringFormat={}{0:F0}%}"
                        Foreground="#AAFFFFFF" FontSize="10" Margin="6,0,0,0"
                        VerticalAlignment="Center" Width="28" />
         </Grid>
@@ -42,8 +57,8 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="BAT" Foreground="#99FFFFFF" FontSize="11" VerticalAlignment="Center" />
             <ProgressBar Grid.Column="1" Value="{Binding BatteryPercent}" Maximum="100"
-                         Width="60" Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
-                         VerticalAlignment="Center" />
+                         Foreground="{DynamicResource AccentBrush}" Style="{StaticResource ThinProgress}"
+                         HorizontalAlignment="Stretch" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" Text="{Binding BatteryPercent, StringFormat={}{0:F0}%}"
                        Foreground="#AAFFFFFF" FontSize="10" Margin="6,0,0,0"
                        VerticalAlignment="Center" Width="28" />

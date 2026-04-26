@@ -151,8 +151,11 @@ public class VolumeMixerService : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
         _disposed = true;
+        try { _device?.Dispose(); } catch { }
         _device = null;
+        try { _enumerator?.Dispose(); } catch { }
         _enumerator = null;
     }
 }

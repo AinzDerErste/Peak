@@ -58,15 +58,14 @@ public partial class IslandViewModel : ObservableObject
 
     // System
     [ObservableProperty] private float _cpuUsage;
+    [ObservableProperty] private float _gpuUsage;
     [ObservableProperty] private float _memoryUsage;
-    [ObservableProperty] private string _memoryText = string.Empty;
     [ObservableProperty] private float? _batteryPercent;
     [ObservableProperty] private bool? _isCharging;
     [ObservableProperty] private bool _hasBattery;
 
     // Weather
     [ObservableProperty] private string _weatherTemp = string.Empty;
-    [ObservableProperty] private string _weatherIcon = "\u2601";
     [ObservableProperty] private string _weatherDescription = string.Empty;
     [ObservableProperty] private string _weatherCity = string.Empty;
     [ObservableProperty] private Geometry? _weatherIconGeometry;
@@ -576,8 +575,8 @@ public partial class IslandViewModel : ObservableObject
         _dispatcher.Invoke(() =>
         {
             CpuUsage = stats.CpuUsage;
+            GpuUsage = stats.GpuUsage;
             MemoryUsage = stats.MemoryUsagePercent;
-            MemoryText = $"{stats.MemoryUsedMB / 1024.0:F1}/{stats.MemoryTotalMB / 1024.0:F1} GB";
             BatteryPercent = stats.BatteryPercent;
             IsCharging = stats.IsCharging;
             HasBattery = stats.BatteryPercent.HasValue;
@@ -701,7 +700,6 @@ public partial class IslandViewModel : ObservableObject
             _dispatcher.Invoke(() =>
             {
                 WeatherTemp = $"{weather.Temperature:F0}°C";
-                WeatherIcon = weather.Icon;
                 WeatherDescription = weather.Description;
                 WeatherCity = weather.CityName;
                 WeatherIconGeometry = MapWeatherIconToGeometry(weather.Icon);

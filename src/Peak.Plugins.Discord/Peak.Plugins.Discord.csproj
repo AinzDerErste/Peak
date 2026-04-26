@@ -18,6 +18,10 @@
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
     </ProjectReference>
+    <!-- Logging abstractions are provided by the host at runtime; don't ship a second copy -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <Target Name="CopyToPluginsDir" AfterTargets="Build">

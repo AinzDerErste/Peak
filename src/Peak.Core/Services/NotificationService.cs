@@ -1,5 +1,3 @@
-using Peak.Core.Models;
-using Windows.Storage.Streams;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 

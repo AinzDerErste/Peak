@@ -8,6 +8,13 @@ namespace Peak.Core.Services;
 public class SystemMonitorService : IDisposable
 {
     private PerformanceCounter? _cpuCounter;
+
+    // GPU Engine has one instance per (process × engine), so the list churns as
+    // apps start/stop. Cache the 3D-engine counters and re-enumerate periodically.
+    private readonly List<PerformanceCounter> _gpuCounters = new();
+    private DateTime _gpuCountersRefreshedAt = DateTime.MinValue;
+    private static readonly TimeSpan GpuRefreshInterval = TimeSpan.FromSeconds(30);
+
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
 
@@ -50,7 +57,8 @@ public class SystemMonitorService : IDisposable
             {
                 var stats = new SystemStats
                 {
-                    CpuUsage = _cpuCounter?.NextValue() ?? 0
+                    CpuUsage = _cpuCounter?.NextValue() ?? 0,
+                    GpuUsage = ReadGpuUsage()
                 };
 
                 // Memory
@@ -85,11 +93,63 @@ public class SystemMonitorService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads total GPU 3D-engine utilisation by summing the "Utilization Percentage"
+    /// counter across every <c>*_engtype_3D</c> instance. Mirrors what Task Manager
+    /// shows as "GPU 3D %". Cached counter list is refreshed every 30s to track
+    /// processes that come and go.
+    /// </summary>
+    private float ReadGpuUsage()
+    {
+        try
+        {
+            // Periodically rebuild the counter list — process IDs in the instance
+            // name are baked in at counter-creation time, so dead processes leave
+            // dead counters behind otherwise.
+            if (DateTime.UtcNow - _gpuCountersRefreshedAt > GpuRefreshInterval)
+            {
+                foreach (var c in _gpuCounters) { try { c.Dispose(); } catch { } }
+                _gpuCounters.Clear();
+
+                var category = new PerformanceCounterCategory("GPU Engine");
+                foreach (var instance in category.GetInstanceNames())
+                {
+                    if (!instance.EndsWith("engtype_3D")) continue;
+                    try
+                    {
+                        var counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", instance, readOnly: true);
+                        counter.NextValue(); // First read primes the counter; always returns 0
+                        _gpuCounters.Add(counter);
+                    }
+                    catch { /* Instance vanished between enumeration and creation */ }
+                }
+                _gpuCountersRefreshedAt = DateTime.UtcNow;
+            }
+
+            float total = 0;
+            foreach (var counter in _gpuCounters)
+            {
+                try { total += counter.NextValue(); }
+                catch { /* Process exited — counter throws InvalidOperationException */ }
+            }
+
+            // Multiple engines can sum to >100% in edge cases; clamp for sane UI display.
+            return Math.Min(total, 100f);
+        }
+        catch
+        {
+            // No GPU performance counters available (very old Windows / no driver)
+            return 0;
+        }
+    }
+
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
         _timer?.Dispose();
         _cpuCounter?.Dispose();
+        foreach (var c in _gpuCounters) { try { c.Dispose(); } catch { } }
+        _gpuCounters.Clear();
     }
 }

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -71,13 +70,6 @@ public partial class SettingsWindow : Window
         _recordedHotkeyVk = s.HotkeyVirtualKey;
         _recordedHotkeyDisplay = s.HotkeyDisplay;
         HotkeyBox.Text = s.HotkeyDisplay;
-        ShowClockCheck.IsChecked = s.ShowClock;
-        ShowMediaCheck.IsChecked = s.ShowMedia;
-        ShowSystemCheck.IsChecked = s.ShowSystemMonitor;
-        ShowWeatherCheck.IsChecked = s.ShowWeather;
-        ShowCalendarCheck.IsChecked = s.ShowCalendar;
-        ShowNotificationsCheck.IsChecked = s.ShowNotifications;
-        ShowTimerCheck.IsChecked = s.ShowTimer;
         ShowBorderCheck.IsChecked = s.ShowBorder;
 
         // Network graph style
@@ -400,14 +392,6 @@ public partial class SettingsWindow : Window
         var s = _settingsManager.Settings;
         s.Behavior = (AlwaysVisibleCheck.IsChecked ?? true) ? IslandBehavior.AlwaysVisible : IslandBehavior.EventOnly;
         s.AutoCollapseSeconds = (int)CollapseSlider.Value;
-        s.ShowClock = ShowClockCheck.IsChecked ?? true;
-        s.ShowMedia = ShowMediaCheck.IsChecked ?? true;
-        s.ShowSystemMonitor = ShowSystemCheck.IsChecked ?? true;
-        s.ShowWeather = ShowWeatherCheck.IsChecked ?? true;
-        s.ShowCalendar = ShowCalendarCheck.IsChecked ?? true;
-        s.ShowNotifications = ShowNotificationsCheck.IsChecked ?? true;
-        s.ShowTimer = ShowTimerCheck.IsChecked ?? true;
-
         s.ShowBorder = ShowBorderCheck.IsChecked ?? true;
 
         s.NetworkGraphStyle = (NetGraphBarsRadio.IsChecked == true)

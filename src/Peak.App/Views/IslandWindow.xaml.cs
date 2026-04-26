@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -400,10 +399,13 @@ public partial class IslandWindow : Window
         }
     }
 
-    private void OnEditSlotClick(object sender, MouseButtonEventArgs e)
-    {
-        // Handled by ComboBox inside the overlay
-    }
+    /// <summary>
+    /// Empty by design — the slot's edit overlay contains a ComboBox that handles its own
+    /// click events. This handler exists only so XAML's <c>MouseDown="OnEditSlotClick"</c>
+    /// binding swallows the event on the surrounding Border instead of letting it bubble
+    /// up to drag-handler code.
+    /// </summary>
+    private void OnEditSlotClick(object sender, MouseButtonEventArgs e) { }
 
     // ─── Widget Drag & Drop (Edit Mode) ─────────────────────────
 

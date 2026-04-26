@@ -205,7 +205,7 @@ public class ClipboardService : IDisposable
                 {
                     _history.AddRange(items);
                     if (_history.Count > 0 && _history[0].TextContent != null)
-                        _lastTextHash = _history[0].TextContent.GetHashCode().ToString();
+                        _lastTextHash = _history[0].TextContent!.GetHashCode().ToString();
                 }
             }
         }

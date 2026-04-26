@@ -2,7 +2,8 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Peak.Plugin.Sdk;
 
 namespace Peak.Plugins.Discord;
@@ -18,12 +19,14 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
     private DiscordRpcClient? _rpc;
     private AvatarCache? _avatars;
     private IIslandHost? _host;
+    private ILogger<DiscordPlugin>? _logger;
     private CancellationTokenSource? _reconnectCts;
     private readonly HashSet<string> _speakingNow = new();
 
     public void Initialize(IServiceProvider services)
     {
-        _avatars = new AvatarCache();
+        _logger = services.GetService<ILogger<DiscordPlugin>>();
+        _avatars = new AvatarCache(services.GetService<ILogger<AvatarCache>>());
     }
 
     public void LoadSettings(JsonElement? settings)
@@ -155,7 +158,6 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
                 {
                     AccessToken = _settings.AccessToken
                 };
-                _rpc.Connected += OnRpcConnected;
                 _rpc.Disconnected += OnRpcDisconnected;
                 _rpc.VoiceChannelChanged += OnVoiceChannelChanged;
                 _rpc.ParticipantsChanged += OnParticipantsChanged;
@@ -194,7 +196,6 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
 
     // ─── Event handlers ─────────────────────────────
 
-    private void OnRpcConnected() { }
     private void OnRpcDisconnected()
     {
         _host?.SetViewModelProperty("DiscordCallCount", 0);
@@ -315,7 +316,7 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
         _settings.AccessToken = token;
         _settings.TokenExpiresAt = DateTime.UtcNow.AddDays(6);
         try { _host?.RequestSettingsSave(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Discord RequestSettingsSave: {ex.Message}"); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Discord RequestSettingsSave failed"); }
     }
 
     private async Task ShowAvatarAsync(string? userId, string? avatarHash, int discriminator = 0)

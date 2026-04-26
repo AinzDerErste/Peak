@@ -661,55 +661,14 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Widgets -->
-                        <TextBlock Text="WIDGETS" Style="{StaticResource SectionHeader}" />
+                        <!-- Network -->
+                        <TextBlock Text="NETWORK" Style="{StaticResource SectionHeader}" />
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <DockPanel>
-                                    <TextBlock Text="Clock" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowClockCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="Weather" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowWeatherCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="Media Controls" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowMediaCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="System Monitor" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowSystemCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="Calendar" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowCalendarCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="Notifications" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowNotificationsCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <DockPanel Margin="0,6,0,0">
-                                    <TextBlock Text="Test notification peek" Style="{StaticResource SubLabel}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <Button Content="Test Peek" HorizontalAlignment="Right"
-                                            Style="{StaticResource AccentButton}" Padding="12,4"
-                                            Click="OnTestPeekClick" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
-                                    <TextBlock Text="Timer" Style="{StaticResource Label}" DockPanel.Dock="Left" VerticalAlignment="Center" />
-                                    <CheckBox x:Name="ShowTimerCheck" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" IsChecked="True" />
-                                </DockPanel>
-                                <Border Style="{StaticResource CardSep}" />
-                                <DockPanel>
                                     <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
-                                        <TextBlock Text="Network graph style" Style="{StaticResource Label}" />
+                                        <TextBlock Text="Graph style" Style="{StaticResource Label}" />
                                         <TextBlock Text="How download/upload history is visualised" Style="{StaticResource SubLabel}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -762,6 +721,13 @@
                                 <TextBlock x:Name="NoNotificationAppsHint"
                                            Text="No apps yet — once you receive a notification, it'll show up here."
                                            Style="{StaticResource SubLabel}" FontStyle="Italic" />
+                                <Border Style="{StaticResource CardSep}" />
+                                <DockPanel>
+                                    <TextBlock Text="Test notification peek" Style="{StaticResource SubLabel}" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                                    <Button Content="Test Peek" HorizontalAlignment="Right"
+                                            Style="{StaticResource AccentButton}" Padding="12,4"
+                                            Click="OnTestPeekClick" />
+                                </DockPanel>
                             </StackPanel>
                         </Border>
 

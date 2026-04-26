@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
 
 namespace Peak.Plugins.Discord;
 
@@ -11,11 +12,13 @@ namespace Peak.Plugins.Discord;
 public class AvatarCache : IDisposable
 {
     private readonly string _cacheDir;
+    private readonly ILogger<AvatarCache>? _logger;
     private readonly HttpClient _http = new();
     private readonly ConcurrentDictionary<string, BitmapImage> _memory = new();
 
-    public AvatarCache()
+    public AvatarCache(ILogger<AvatarCache>? logger = null)
     {
+        _logger = logger;
         _cacheDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Peak", "plugins", "discord", "avatars");
@@ -43,7 +46,7 @@ public class AvatarCache : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Avatar download failed for {userId}: {ex.Message}");
+                _logger?.LogWarning(ex, "Avatar download failed for {UserId}", userId);
                 return null;
             }
         }

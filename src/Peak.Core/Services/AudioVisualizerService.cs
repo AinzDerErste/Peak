@@ -28,7 +28,7 @@ public class AudioVisualizerService : IDisposable
         var result = new List<(string Id, string Name)>();
         try
         {
-            var enumerator = new MMDeviceEnumerator();
+            using var enumerator = new MMDeviceEnumerator();
             var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
             foreach (var dev in devices)
                 result.Add((dev.ID, dev.FriendlyName));
@@ -51,7 +51,7 @@ public class AudioVisualizerService : IDisposable
             for (int i = 0; i < _hanningWindow.Length; i++)
                 _hanningWindow[i] = 0.5f * (1f - MathF.Cos(2f * MathF.PI * i / _hanningWindow.Length));
 
-            var enumerator = new MMDeviceEnumerator();
+            using var enumerator = new MMDeviceEnumerator();
             MMDevice? device = null;
 
             // Try to find the requested device by ID
@@ -85,7 +85,6 @@ public class AudioVisualizerService : IDisposable
 
             _capture = new WasapiLoopbackCapture(device);
             _capture.DataAvailable += OnDataAvailable;
-            _capture.RecordingStopped += (_, _) => { };
             _capture.StartRecording();
             _isRunning = true;
         }

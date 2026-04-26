@@ -4,6 +4,7 @@ using Hardcodet.Wpf.TaskbarNotification;
 using DrawingIcon = System.Drawing.Icon;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Peak.App.ViewModels;
 using Peak.App.Views;
 using Peak.App.Views.Widgets;
@@ -17,6 +18,7 @@ public partial class App : Application
 {
     private static readonly Mutex SingleInstanceMutex = new(true, "Peak_SingleInstance_Mutex");
     private IHost? _host;
+    private ILogger<App>? _logger;
     private TaskbarIcon? _trayIcon;
     private IslandWindow? _islandWindow;
     private PluginLoader? _pluginLoader;
@@ -77,6 +79,8 @@ public partial class App : Application
                     services.AddHttpClient("Update");
                 })
                 .Build();
+
+            _logger = _host.Services.GetRequiredService<ILogger<App>>();
 
             // Load settings
             var settingsManager = _host.Services.GetRequiredService<SettingsManager>();
@@ -321,7 +325,7 @@ public partial class App : Application
     {
         var pluginsDir = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Peak", "plugins");
-        _pluginLoader = new PluginLoader(pluginsDir);
+        _pluginLoader = new PluginLoader(pluginsDir, services.GetRequiredService<ILogger<PluginLoader>>());
 
         try
         {
@@ -333,7 +337,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Plugin loading failed: {ex.Message}");
+            _logger?.LogWarning(ex, "Plugin loading failed");
         }
     }
 

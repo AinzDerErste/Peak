@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Peak.App.ViewModels;
-using Peak.Core.Models;
 
 namespace Peak.App.Views.Widgets;
 
