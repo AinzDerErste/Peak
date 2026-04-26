@@ -36,6 +36,75 @@ public partial class IslandWindow : Window
     // Target sizes for each state
     private static readonly (double W, double H) CollapsedSize = (210, 36);
     private static readonly (double W, double H) PeekSize = (400, 56);
+
+    // Spotlight pill is height-dynamic — empty query = compact bar, results grow it
+    // up to the cap. Width stays fixed so the layout doesn't shift horizontally.
+    // Spotlight geometry (height-dynamic; width fixed). The SpotlightContent grid
+    // is VerticalAlignment="Center" inside the IslandBorder so any mismatch between
+    // SpotlightSearchBarHeight and the actual rendered control gets split evenly
+    // top/bottom — visual symmetry without needing pixel-perfect measurement.
+    //
+    // The outer IslandBorder height = padding-top + content + padding-bottom.
+    // Content = search bar (always) + optional results-block.
+    // The Spotlight pill overrides the global IslandBorder.Padding ("16,8") with
+    // a tighter pad ("6,4") via SetContentVisibility — keeps the dark chrome
+    // hugged close to the search bar on all four sides.
+    private const double SpotlightWidth = 440;
+    private static readonly Thickness SpotlightInnerPadding = new(6); // uniform 6px on all four sides
+    private static readonly Thickness DefaultIslandPadding = new(16, 8, 16, 8); // matches IslandWindow.xaml
+    private const double SpotlightSearchBarHeight = 36;    // pinned via Height="36" in IslandWindow.xaml
+    private const double SpotlightResultsGap = 17;         // 8 (above divider) + 1 (divider line) + 8 (below) — matches ListBox.Margin "0,17,0,0"
+    private const double SpotlightResultRowHeight = 36;    // matches ListBoxItem.Height + the search bar's Height
+    private const int SpotlightMaxVisibleResults = 8;      // ListBox scrolls beyond this
+
+    /// <summary>
+    /// Lightweight in-place resize for the Spotlight pill — only Height needs to
+    /// change as results come in/out, no scale transform or content fade. Avoids
+    /// re-running the heavy DoScaleTransition path on every keystroke.
+    /// </summary>
+    private void AnimateSpotlightResize()
+    {
+        if (_viewModel.CurrentState != IslandState.Spotlight) return;
+
+        var (targetW, targetH) = GetSpotlightSize();
+        if (Math.Abs(_currentH - targetH) < 0.5 && Math.Abs(_currentW - targetW) < 0.5) return;
+
+        _currentW = targetW;
+        _currentH = targetH;
+
+        var dur = TimeSpan.FromMilliseconds(160);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        IslandBorder.BeginAnimation(WidthProperty, null);
+        IslandBorder.BeginAnimation(HeightProperty, null);
+
+        var widthAnim = new DoubleAnimation(targetW, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+        var heightAnim = new DoubleAnimation(targetH, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+        widthAnim.Completed += (_, _) => IslandBorder.Width = targetW;
+        heightAnim.Completed += (_, _) => IslandBorder.Height = targetH;
+
+        IslandBorder.BeginAnimation(WidthProperty, widthAnim);
+        IslandBorder.BeginAnimation(HeightProperty, heightAnim);
+    }
+
+    /// <summary>
+    /// Computes the dynamic Spotlight pill size for the current ViewModel state.
+    /// Called whenever the result list changes so the box can shrink/grow smoothly.
+    /// </summary>
+    private (double W, double H) GetSpotlightSize()
+    {
+        int count = Math.Min(_viewModel.SearchResults.Count, SpotlightMaxVisibleResults);
+
+        // Inner content height: search bar always present, results block optional.
+        double content = SpotlightSearchBarHeight;
+        if (count > 0)
+            content += SpotlightResultsGap + (count * SpotlightResultRowHeight);
+
+        // Outer Border height = content + Spotlight-specific vertical padding on
+        // both sides (padding lives INSIDE the Border, so it adds to outer height).
+        double h = content + SpotlightInnerPadding.Top + SpotlightInnerPadding.Bottom;
+        return (SpotlightWidth, h);
+    }
     // Fixed window size
     private const double FixedWindowWidth = 520;
     private const double FixedWindowHeight = 400;
@@ -126,6 +195,10 @@ public partial class IslandWindow : Window
         StateChanged += OnStateChanged;
         Deactivated += OnDeactivated;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // Resize the Spotlight pill smoothly as results arrive/disappear so the
+        // box doesn't sit there as a giant black rectangle for empty queries.
+        viewModel.SearchResults.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(AnimateSpotlightResize);
 
         _fullscreenCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _fullscreenCheckTimer.Tick += OnFullscreenCheck;
@@ -587,18 +660,25 @@ public partial class IslandWindow : Window
     [DllImport("user32.dll")]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private const int HOTKEY_ID_TOGGLE = 9001;
+    private const int HOTKEY_ID_SPOTLIGHT = 9002;
     private const int WM_HOTKEY = 0x0312;
 
     private void RegisterGlobalHotkey()
     {
         var s = _viewModel.Settings;
         RegisterHotKey(_hwnd, HOTKEY_ID_TOGGLE, s.HotkeyModifiers, s.HotkeyVirtualKey);
+        RegisterHotKey(_hwnd, HOTKEY_ID_SPOTLIGHT, s.SpotlightHotkeyModifiers, s.SpotlightHotkeyVirtualKey);
     }
 
     private void UnregisterGlobalHotkey()
     {
         UnregisterHotKey(_hwnd, HOTKEY_ID_TOGGLE);
+        UnregisterHotKey(_hwnd, HOTKEY_ID_SPOTLIGHT);
     }
 
     public void ReRegisterGlobalHotkey()
@@ -610,10 +690,55 @@ public partial class IslandWindow : Window
 
     private void HandleHotkeyToggle()
     {
+        // Spotlight steals priority — first press of the toggle hotkey just dismisses it.
+        if (_viewModel.CurrentState == IslandState.Spotlight)
+        {
+            _viewModel.CloseSpotlightCommand.Execute(null);
+            return;
+        }
+
         if (_viewModel.CurrentState == IslandState.Hidden)
             _viewModel.Collapse();
         else
             _viewModel.HideIsland();
+    }
+
+    /// <summary>
+    /// Handler for the Spotlight global hotkey. Toggles Spotlight mode if the
+    /// island is visible, or closes it if it's already open. When the island is
+    /// hidden, the hotkey is ignored entirely — the user explicitly opted out
+    /// of Peak by hiding it, so we shouldn't pop up over their work.
+    /// Forces foreground focus + TextBox focus so the user can type immediately.
+    /// </summary>
+    private void HandleHotkeySpotlight()
+    {
+        if (_viewModel.CurrentState == IslandState.Spotlight)
+        {
+            _viewModel.CloseSpotlightCommand.Execute(null);
+            return;
+        }
+
+        // Island is hidden → respect that, do nothing.
+        if (_viewModel.CurrentState == IslandState.Hidden) return;
+
+        _viewModel.OpenSpotlightCommand.Execute(null);
+
+        // SetForegroundWindow only works while we own the foreground "right" — pressing
+        // a registered hotkey grants that right briefly, so doing it inline (before any
+        // BeginInvoke) is the most reliable path. WPF Activate() alone does not pull
+        // a Topmost+ToolWindow reliably to the foreground.
+        SetForegroundWindow(_hwnd);
+        Activate();
+
+        // Focus the TextBox once the spotlight content has actually been laid out.
+        // Using Input priority (lower than Loaded) so the layout pass happens first.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            SpotlightInput.Focusable = true;
+            SpotlightInput.Focus();
+            System.Windows.Input.Keyboard.Focus(SpotlightInput);
+            SpotlightInput.SelectAll();
+        }), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void ShowUnhideGreeting(IslandState targetState)
@@ -703,6 +828,10 @@ public partial class IslandWindow : Window
         StopMousePolling();
         if (_viewModel.CurrentState == IslandState.Hidden)
             return; // Hidden state is only toggled via hotkey
+
+        // Spotlight is hotkey-driven — hover mustn't trigger Expand and clobber it.
+        if (_viewModel.CurrentState == IslandState.Spotlight)
+            return;
 
         // Plugin overlay active (e.g. incoming call) — don't expand
         if (_viewModel.ExpansionBlocked)
@@ -857,6 +986,8 @@ public partial class IslandWindow : Window
     {
         if (_viewModel.IsEditMode) { StopMousePolling(); return; }
         if (_viewModel.CurrentState == IslandState.Hidden) { StopMousePolling(); return; }
+        // Spotlight stays open until the user dismisses it explicitly (Escape / click)
+        if (_viewModel.CurrentState == IslandState.Spotlight) { StopMousePolling(); return; }
         if (_isDragging || _isWidgetDragging) { StopMousePolling(); return; }
         if (_viewModel.ExpansionBlocked) { StopMousePolling(); return; }
 
@@ -1356,6 +1487,7 @@ public partial class IslandWindow : Window
             IslandState.Collapsed => CollapsedSize,
             IslandState.Peek => PeekSize,
             IslandState.Expanded => ExpandedSize,
+            IslandState.Spotlight => GetSpotlightSize(),
             _ => CollapsedSize
         };
 
@@ -1412,6 +1544,7 @@ public partial class IslandWindow : Window
             IslandState.Collapsed => _collapsedOverlay ?? (UIElement)CollapsedContent,
             IslandState.Peek => PeekContent,
             IslandState.Expanded => ExpandedContent,
+            IslandState.Spotlight => SpotlightContent,
             _ => _collapsedOverlay ?? (UIElement)CollapsedContent
         };
 
@@ -1450,6 +1583,51 @@ public partial class IslandWindow : Window
             _collapsedOverlay.Visibility = showCollapsed ? Visibility.Visible : Visibility.Collapsed;
         PeekContent.Visibility = state == IslandState.Peek ? Visibility.Visible : Visibility.Collapsed;
         ExpandedContent.Visibility = state == IslandState.Expanded ? Visibility.Visible : Visibility.Collapsed;
+        SpotlightContent.Visibility = state == IslandState.Spotlight ? Visibility.Visible : Visibility.Collapsed;
+
+        // Spotlight uses tighter chrome than the rest of the states — switch the
+        // IslandBorder's Padding here so the dark pill hugs the search bar
+        // tightly, then restore the default when leaving Spotlight.
+        IslandBorder.Padding = state == IslandState.Spotlight
+            ? SpotlightInnerPadding
+            : DefaultIslandPadding;
+    }
+
+    // ─── Spotlight input handlers ─────────────────────────────
+
+    /// <summary>
+    /// Wires keyboard navigation inside the Spotlight TextBox: arrow keys move
+    /// the highlight in the result list, Enter launches the selected result,
+    /// Escape closes Spotlight.
+    /// </summary>
+    private void OnSpotlightInputKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case System.Windows.Input.Key.Down:
+                _viewModel.MoveSearchSelection(1);
+                e.Handled = true;
+                break;
+            case System.Windows.Input.Key.Up:
+                _viewModel.MoveSearchSelection(-1);
+                e.Handled = true;
+                break;
+            case System.Windows.Input.Key.Enter:
+                _viewModel.LaunchSearchResultCommand.Execute(_viewModel.SelectedSearchResult);
+                e.Handled = true;
+                break;
+            case System.Windows.Input.Key.Escape:
+                _viewModel.CloseSpotlightCommand.Execute(null);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>Double-clicking a result in the list launches it.</summary>
+    private void OnSpotlightResultDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_viewModel.SelectedSearchResult != null)
+            _viewModel.LaunchSearchResultCommand.Execute(_viewModel.SelectedSearchResult);
     }
 
     // ─── Win32 WndProc Hook — Block Minimize ──────────────────
@@ -1469,6 +1647,12 @@ public partial class IslandWindow : Window
                 if (wParam.ToInt32() == HOTKEY_ID_TOGGLE)
                 {
                     HandleHotkeyToggle();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+                if (wParam.ToInt32() == HOTKEY_ID_SPOTLIGHT)
+                {
+                    HandleHotkeySpotlight();
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -1514,6 +1698,11 @@ public partial class IslandWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
+        // Spotlight should dismiss when the user clicks outside the island. Doing it
+        // on Deactivated keeps the behaviour close to native Windows search overlays.
+        if (_viewModel.CurrentState == IslandState.Spotlight)
+            _viewModel.CloseSpotlightCommand.Execute(null);
+
         // Re-assert topmost when another app steals focus (e.g. media player activation)
         if (!_hiddenByFullscreen && _viewModel.IsVisible)
         {

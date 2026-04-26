@@ -70,6 +70,7 @@ public partial class App : Application
                     services.AddSingleton<NotesService>();
                     services.AddSingleton<VolumeMixerService>();
                     services.AddSingleton<PomodoroService>();
+                    services.AddSingleton<SearchService>();
                     services.AddSingleton<WidgetRegistry>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();
@@ -101,6 +102,11 @@ public partial class App : Application
             // Start update check
             var updateService = _host.Services.GetRequiredService<UpdateService>();
             updateService.StartPeriodicCheck();
+
+            // Build the Spotlight search index in the background so the first hotkey
+            // press has something ready (or near-ready) to query.
+            var searchService = _host.Services.GetRequiredService<SearchService>();
+            searchService.Start();
 
             // Show island (slots are already loaded from settings)
             _islandWindow = _host.Services.GetRequiredService<IslandWindow>();

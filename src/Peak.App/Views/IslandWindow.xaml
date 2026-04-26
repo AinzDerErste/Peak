@@ -387,6 +387,135 @@
                             Visibility="Collapsed"
                             Command="{Binding ExitEditModeCommand}" />
                 </StackPanel>
+
+                <!-- Spotlight: search field + result list, takes the whole pill in Spotlight state.
+                     Symmetric vertical margin so the search bar is visually centered inside the
+                     IslandBorder padding when the results list is empty. -->
+                <!-- Spotlight overrides IslandBorder.Padding to "6,4" at runtime
+                     (see IslandWindow.xaml.cs SetContentVisibility) so the dark
+                     chrome hugs the search bar tight on ALL four sides. -->
+                <Grid x:Name="SpotlightContent" Visibility="Collapsed"
+                      VerticalAlignment="Center">
+                    <!-- Both rows Auto so the Grid sizes to its actual content. A `*` row
+                         here would silently consume the IslandBorder's leftover height,
+                         producing the asymmetric "search bar at top, empty space below"
+                         look when the result list is collapsed. VerticalAlignment="Center"
+                         then evenly distributes any leftover IslandBorder height. -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Query input — Height pinned so the IslandBorder math in
+                         IslandWindow.xaml.cs (SpotlightSearchBarHeight) lines up
+                         with what's actually rendered, no font/DPI guesswork.
+                         CornerRadius = outer pill radius (18) − Spotlight padding (6)
+                         so the inner curve sits flush inside the outer curve. -->
+                    <Border Grid.Row="0" Background="#10FFFFFF" CornerRadius="12"
+                            Padding="12,0" Height="36">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Data="{StaticResource IconSearch}"
+                                  Fill="#99FFFFFF" Stretch="Uniform" Width="14" Height="14"
+                                  VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Grid Grid.Column="1">
+                                <!-- Placeholder shown when query is empty -->
+                                <TextBlock Text="Search apps…" Foreground="#66FFFFFF" FontSize="14"
+                                           VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SearchQuery}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox x:Name="SpotlightInput"
+                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent" Foreground="White" CaretBrush="White"
+                                         BorderThickness="0" FontSize="14" VerticalAlignment="Center"
+                                         Focusable="True" IsTabStop="True"
+                                         KeyDown="OnSpotlightInputKeyDown" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- Subtle divider between search bar and results. Sits at top of Row 1
+                         with 8px margin above. Only visible when there are matches; the
+                         ListBox below has a matching top margin (8 + 1 + 8 = 17) so its
+                         first item starts cleanly below the divider. -->
+                    <Border Grid.Row="1" Height="1" Background="#20FFFFFF"
+                            Margin="12,8,12,0" VerticalAlignment="Top"
+                            Visibility="{Binding HasSearchResults, Converter={StaticResource BoolToVisibility}}" />
+
+                    <!-- "No matches" hint when query has text but nothing found -->
+                    <TextBlock Grid.Row="1" Text="No matches" Foreground="#66FFFFFF"
+                               FontSize="13" Margin="12,12,0,0"
+                               HorizontalAlignment="Left" VerticalAlignment="Top"
+                               Visibility="{Binding ShowNoMatchesHint, Converter={StaticResource BoolToVisibility}}" />
+
+                    <!-- Result list -->
+                    <ListBox x:Name="SpotlightResults" Grid.Row="1"
+                             ItemsSource="{Binding SearchResults}"
+                             SelectedItem="{Binding SelectedSearchResult}"
+                             Background="Transparent" BorderThickness="0"
+                             Foreground="White" Margin="0,17,0,0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Visibility="{Binding HasSearchResults, Converter={StaticResource BoolToVisibility}}"
+                             MouseDoubleClick="OnSpotlightResultDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <!-- Result rows mirror the search bar's design language:
+                                 same Height (36) and CornerRadius (12), same horizontal
+                                 inner padding (12), same #10FFFFFF tinted background
+                                 family. Default rows are transparent so the highlighted
+                                 (selected/hovered) row reads clearly. -->
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Height" Value="36" />
+                                <Setter Property="Padding" Value="12,0" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#10FFFFFF" />
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#08FFFFFF" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{Binding Path, Converter={StaticResource PathToIconConverter}, ConverterParameter=32}"
+                                           Width="20" Height="20" Margin="0,0,10,0"
+                                           VerticalAlignment="Center"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <TextBlock Text="{Binding Name}" Foreground="White"
+                                               FontSize="13" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
             </Grid>
         </Border>
 

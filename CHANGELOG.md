@@ -4,6 +4,41 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.5.0] — 2026-04
+
+### Added
+- **Spotlight search** — global hotkey overlay (default `Ctrl+Alt+Space`, configurable in Settings) opens a search field over the island with live ranked results from the Windows Shell `shell:appsFolder` namespace plus Start Menu shortcuts. Covers Win32 desktop programs and UWP / Microsoft Store apps in one index.
+- **App icons** in result rows via `IShellItemImageFactory` — same icons Windows Explorer shows.
+- Dynamic pill resizing — Spotlight starts compact and grows smoothly with each result (capped at 8 visible, scrolls beyond).
+- Configurable Spotlight hotkey alongside the existing toggle hotkey, both rebindable in the Settings window.
+- Diagnostic log at `%AppData%\Peak\logs\search.log` for troubleshooting index issues.
+
+### Changed
+- Spotlight respects the hidden island state — pressing the hotkey while Peak is hidden does nothing instead of forcing the island back.
+- Tightened Spotlight chrome — concentric rounded corners (outer 18, inner 12) with uniform 6px padding on all four sides; the dark pill hugs the search bar tightly.
+- Result rows mirror the search bar's design language — same height, corner radius, and highlight colour for selection.
+
+---
+
+## [1.4.2] — 2026-04
+
+### Changed
+- Replaced 9 `System.Diagnostics.Debug.WriteLine` call sites with structured `ILogger` logging so warnings survive release builds.
+- Fixed NAudio COM disposal leaks in `VolumeMixerService` and `AudioVisualizerService`.
+- Removed dead `ObservableProperty` declarations (`_memoryText`, `_weatherIcon`) and 6 unused `using` directives across the solution.
+- Added explicit `Microsoft.Extensions.Logging.Abstractions` reference and a project `.editorconfig`.
+
+### Added
+- **GPU 3D-engine utilisation** as a third row in the System Monitor widget (sums Windows perf counters across `*_engtype_3D` instances).
+- XML documentation for Plugin SDK public types and plugin settings classes.
+- `CHANGELOG.md` (this file) and a completed `README.md`.
+
+### Fixed
+- System Monitor widget bars now stretch to fill the column instead of being pinned to a hardcoded 60px width.
+- CS8602 nullable warning in `ClipboardService`.
+
+---
+
 ## [1.4.1] — 2025-04
 
 ### Removed

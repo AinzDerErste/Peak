@@ -99,6 +99,11 @@ public class AppSettings
     public uint HotkeyVirtualKey { get; set; } = 0x4E;            // N
     public string HotkeyDisplay { get; set; } = "Ctrl+Shift+N";
 
+    // Spotlight search hotkey (defaults to Ctrl+Alt+Space)
+    public uint SpotlightHotkeyModifiers { get; set; } = 0x0001 | 0x0002; // ALT + CTRL
+    public uint SpotlightHotkeyVirtualKey { get; set; } = 0x20;            // Space
+    public string SpotlightHotkeyDisplay { get; set; } = "Ctrl+Alt+Space";
+
     // Collapsed-state slots: Left, Center, Right
     public CollapsedWidget[] CollapsedSlots { get; set; } =
         [CollapsedWidget.None, CollapsedWidget.Clock, CollapsedWidget.Weather];

@@ -24,6 +24,9 @@ public partial class SettingsWindow : Window
     private uint _recordedHotkeyModifiers;
     private uint _recordedHotkeyVk;
     private string _recordedHotkeyDisplay = "";
+    private uint _recordedSpotlightHotkeyModifiers;
+    private uint _recordedSpotlightHotkeyVk;
+    private string _recordedSpotlightHotkeyDisplay = "";
 
     // Plugin settings edit state: (pluginId, fieldKey) → TextBox
     private readonly List<(string PluginId, string Key, TextBox Box)> _pluginFieldBoxes = new();
@@ -70,6 +73,11 @@ public partial class SettingsWindow : Window
         _recordedHotkeyVk = s.HotkeyVirtualKey;
         _recordedHotkeyDisplay = s.HotkeyDisplay;
         HotkeyBox.Text = s.HotkeyDisplay;
+
+        _recordedSpotlightHotkeyModifiers = s.SpotlightHotkeyModifiers;
+        _recordedSpotlightHotkeyVk = s.SpotlightHotkeyVirtualKey;
+        _recordedSpotlightHotkeyDisplay = s.SpotlightHotkeyDisplay;
+        SpotlightHotkeyBox.Text = s.SpotlightHotkeyDisplay;
         ShowBorderCheck.IsChecked = s.ShowBorder;
 
         // Network graph style
@@ -440,6 +448,9 @@ public partial class SettingsWindow : Window
         s.HotkeyModifiers = _recordedHotkeyModifiers;
         s.HotkeyVirtualKey = _recordedHotkeyVk;
         s.HotkeyDisplay = _recordedHotkeyDisplay;
+        s.SpotlightHotkeyModifiers = _recordedSpotlightHotkeyModifiers;
+        s.SpotlightHotkeyVirtualKey = _recordedSpotlightHotkeyVk;
+        s.SpotlightHotkeyDisplay = _recordedSpotlightHotkeyDisplay;
         ((App)Application.Current).Services
             .GetRequiredService<IslandWindow>()
             .ReRegisterGlobalHotkey();
@@ -849,6 +860,70 @@ public partial class SettingsWindow : Window
         _recordedHotkeyVk = 0x4E;                    // N
         _recordedHotkeyDisplay = "Ctrl+Shift+N";
         HotkeyBox.Text = _recordedHotkeyDisplay;
+    }
+
+    // ─── Spotlight hotkey capture (mirrors the toggle hotkey logic) ─────
+
+    private void OnSpotlightHotkeyBoxFocused(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        SpotlightHotkeyBox.Text = "Press a key combination…";
+    }
+
+    private void OnSpotlightHotkeyBoxBlurred(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        SpotlightHotkeyBox.Text = _recordedSpotlightHotkeyDisplay;
+    }
+
+    private void OnSpotlightHotkeyBoxKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        e.Handled = true;
+
+        var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+
+        // Ignore pure modifier presses — wait for a real key
+        if (key is System.Windows.Input.Key.LeftCtrl or System.Windows.Input.Key.RightCtrl
+                 or System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift
+                 or System.Windows.Input.Key.LeftAlt or System.Windows.Input.Key.RightAlt
+                 or System.Windows.Input.Key.LWin or System.Windows.Input.Key.RWin
+                 or System.Windows.Input.Key.Escape
+                 or System.Windows.Input.Key.Tab
+                 or System.Windows.Input.Key.System)
+            return;
+
+        var mods = System.Windows.Input.Keyboard.Modifiers;
+        uint winMods = 0;
+        if ((mods & System.Windows.Input.ModifierKeys.Alt) != 0) winMods |= 0x0001;
+        if ((mods & System.Windows.Input.ModifierKeys.Control) != 0) winMods |= 0x0002;
+        if ((mods & System.Windows.Input.ModifierKeys.Shift) != 0) winMods |= 0x0004;
+        if ((mods & System.Windows.Input.ModifierKeys.Windows) != 0) winMods |= 0x0008;
+
+        if (winMods == 0)
+        {
+            SpotlightHotkeyBox.Text = "Need at least one modifier";
+            return;
+        }
+
+        var vk = (uint)System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
+
+        var parts = new List<string>();
+        if ((winMods & 0x0002) != 0) parts.Add("Ctrl");
+        if ((winMods & 0x0004) != 0) parts.Add("Shift");
+        if ((winMods & 0x0001) != 0) parts.Add("Alt");
+        if ((winMods & 0x0008) != 0) parts.Add("Win");
+        parts.Add(key.ToString());
+
+        _recordedSpotlightHotkeyModifiers = winMods;
+        _recordedSpotlightHotkeyVk = vk;
+        _recordedSpotlightHotkeyDisplay = string.Join("+", parts);
+        SpotlightHotkeyBox.Text = _recordedSpotlightHotkeyDisplay;
+    }
+
+    private void OnSpotlightHotkeyResetClick(object sender, RoutedEventArgs e)
+    {
+        _recordedSpotlightHotkeyModifiers = 0x0001 | 0x0002; // Alt + Ctrl
+        _recordedSpotlightHotkeyVk = 0x20;                    // Space
+        _recordedSpotlightHotkeyDisplay = "Ctrl+Alt+Space";
+        SpotlightHotkeyBox.Text = _recordedSpotlightHotkeyDisplay;
     }
 }
 

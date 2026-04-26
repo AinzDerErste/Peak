@@ -17,7 +17,8 @@ public enum IslandState
     Hidden,
     Collapsed,
     Peek,
-    Expanded
+    Expanded,
+    Spotlight
 }
 
 public partial class IslandViewModel : ObservableObject
@@ -34,6 +35,7 @@ public partial class IslandViewModel : ObservableObject
     private readonly ClipboardService _clipboardService;
     private readonly NotesService _notesService;
     private readonly VolumeMixerService _volumeMixerService;
+    private readonly SearchService _searchService;
     private readonly SettingsManager _settingsManager;
     public SettingsManager SettingsManager => _settingsManager;
     public AppSettings Settings => _settingsManager.Settings;
@@ -157,6 +159,78 @@ public partial class IslandViewModel : ObservableObject
     // Volume Mixer
     public ObservableCollection<AudioSession> AudioSessions { get; } = new();
 
+    // Spotlight Search
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSearchResults))]
+    private string _searchQuery = string.Empty;
+    public ObservableCollection<SearchResult> SearchResults { get; } = new();
+    [ObservableProperty] private SearchResult? _selectedSearchResult;
+    public bool HasSearchResults => SearchResults.Count > 0;
+    public bool ShowNoMatchesHint => !HasSearchResults && !string.IsNullOrWhiteSpace(SearchQuery);
+
+    /// <summary>
+    /// Re-runs the search whenever the bound TextBox text changes.
+    /// </summary>
+    partial void OnSearchQueryChanged(string value)
+    {
+        SearchResults.Clear();
+        foreach (var r in _searchService.Search(value))
+            SearchResults.Add(r);
+        SelectedSearchResult = SearchResults.FirstOrDefault();
+        OnPropertyChanged(nameof(HasSearchResults));
+        OnPropertyChanged(nameof(ShowNoMatchesHint));
+    }
+
+    /// <summary>
+    /// Enters Spotlight mode: clears any prior query/results and signals the
+    /// IslandWindow to switch state. The window is then responsible for
+    /// activating itself and focusing the search TextBox.
+    /// </summary>
+    [RelayCommand]
+    public void OpenSpotlight()
+    {
+        SearchQuery = string.Empty;
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        CurrentState = IslandState.Spotlight;
+    }
+
+    /// <summary>Leaves Spotlight mode and returns to the collapsed island.</summary>
+    [RelayCommand]
+    public void CloseSpotlight()
+    {
+        if (CurrentState != IslandState.Spotlight) return;
+        SearchQuery = string.Empty;
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        CurrentState = IslandState.Collapsed;
+    }
+
+    /// <summary>
+    /// Launches the given result (or the currently selected one when null) and
+    /// closes Spotlight. Bound to Enter / list double-click.
+    /// </summary>
+    [RelayCommand]
+    public void LaunchSearchResult(SearchResult? result)
+    {
+        result ??= SelectedSearchResult;
+        if (result == null) return;
+        _searchService.Launch(result);
+        CloseSpotlight();
+    }
+
+    /// <summary>
+    /// Moves the keyboard selection by <paramref name="delta"/> rows (Up/Down arrow keys),
+    /// clamped to the visible result list.
+    /// </summary>
+    public void MoveSearchSelection(int delta)
+    {
+        if (SearchResults.Count == 0) return;
+        var idx = SelectedSearchResult == null ? 0 : SearchResults.IndexOf(SelectedSearchResult);
+        idx = Math.Clamp(idx + delta, 0, SearchResults.Count - 1);
+        SelectedSearchResult = SearchResults[idx];
+    }
+
     // Collapsed-state slots (Left, Center, Right)
     [ObservableProperty] private CollapsedWidget _collapsedLeft = CollapsedWidget.WeatherIcon;
     [ObservableProperty] private CollapsedWidget _collapsedCenter = CollapsedWidget.Clock;
@@ -185,6 +259,7 @@ public partial class IslandViewModel : ObservableObject
         ClipboardService clipboardService,
         NotesService notesService,
         VolumeMixerService volumeMixerService,
+        SearchService searchService,
         SettingsManager settingsManager)
     {
         _mediaService = mediaService;
@@ -199,6 +274,7 @@ public partial class IslandViewModel : ObservableObject
         _clipboardService = clipboardService;
         _notesService = notesService;
         _volumeMixerService = volumeMixerService;
+        _searchService = searchService;
         _settingsManager = settingsManager;
         _dispatcher = Dispatcher.CurrentDispatcher;
 
