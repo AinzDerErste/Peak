@@ -319,6 +319,11 @@ public class SearchService : IDisposable
                 return 600 - name.Length;
         }
 
+        // Acronym + substring matches are skipped for single-character queries —
+        // they'd match nearly every app and produce hundreds of noise results.
+        // (e.g. "/" should never trigger 100 substring hits across all installed apps.)
+        if (query.Length < 2) return 0;
+
         // Acronym match: query letters appear as the first letter of consecutive tokens
         // ("vsc" → "Visual Studio Code").
         if (tokens.Length >= query.Length)

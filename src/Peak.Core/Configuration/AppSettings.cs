@@ -93,6 +93,16 @@ public class AppSettings
     public List<string> SeenNotificationApps { get; set; } = new();
     public HashSet<string> MutedNotificationApps { get; set; } = new();
 
+    // Apps where Peak should keep itself in the foreground (TopMost) instead of
+    // auto-hiding for fullscreen / receding for maximized windows. Each entry can
+    // selectively apply to fullscreen, maximized, or both states.
+    public List<TopmostOverrideRule> TopmostOverrides { get; set; } = new();
+
+    // Apps observed running fullscreen or maximized at runtime. Used to populate
+    // the TopMost-override picker so users can pick from apps they've actually
+    // used recently — same idea as SeenNotificationApps for notifications.
+    public List<string> SeenFullscreenApps { get; set; } = new();
+
     // Global toggle hotkey (defaults to Ctrl+Shift+N)
     // Modifiers are Win32 MOD_* flags: ALT=1, CTRL=2, SHIFT=4, WIN=8
     public uint HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // CTRL + SHIFT
@@ -122,4 +132,22 @@ public class AppSettings
     // Default = empty → all discovered plugins are loaded.
     public HashSet<string> DisabledPlugins { get; set; } = new();
 
+}
+
+/// <summary>
+/// One row in <see cref="AppSettings.TopmostOverrides"/>. When the foreground
+/// window's process matches <see cref="ProcessName"/> AND its state matches one
+/// of the enabled flags, Peak keeps itself in the foreground (re-asserts
+/// Topmost, cancels any auto-hide) instead of receding behind that app.
+/// </summary>
+public class TopmostOverrideRule
+{
+    /// <summary>Process name without ".exe" — case-insensitive match (e.g. "discord", "spotify", "vlc").</summary>
+    public string ProcessName { get; set; } = "";
+
+    /// <summary>Apply when the matched process is running fullscreen (covers entire monitor).</summary>
+    public bool WhenFullscreen { get; set; } = true;
+
+    /// <summary>Apply when the matched process is maximized (covers work area, taskbar still visible).</summary>
+    public bool WhenMaximized { get; set; } = false;
 }

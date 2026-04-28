@@ -57,6 +57,24 @@ public partial class IslandWindow : Window
     private const double SpotlightResultRowHeight = 36;    // matches ListBoxItem.Height + the search bar's Height
     private const int SpotlightMaxVisibleResults = 8;      // ListBox scrolls beyond this
 
+    private bool _spotlightResizeQueued;
+
+    /// <summary>
+    /// Coalesces multiple rapid resize requests (one per ObservableCollection
+    /// Add/Clear) into a single deferred animation. The dispatcher Background
+    /// priority lets all CollectionChanged handlers settle before we measure.
+    /// </summary>
+    private void QueueSpotlightResize()
+    {
+        if (_spotlightResizeQueued) return;
+        _spotlightResizeQueued = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _spotlightResizeQueued = false;
+            AnimateSpotlightResize();
+        }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     /// <summary>
     /// Lightweight in-place resize for the Spotlight pill — only Height needs to
     /// change as results come in/out, no scale transform or content fade. Avoids
@@ -198,7 +216,11 @@ public partial class IslandWindow : Window
 
         // Resize the Spotlight pill smoothly as results arrive/disappear so the
         // box doesn't sit there as a giant black rectangle for empty queries.
-        viewModel.SearchResults.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(AnimateSpotlightResize);
+        // Coalesce rapid CollectionChanged bursts (one per Add/Clear) into ONE
+        // animation pass at the end of the dispatcher cycle. Without this,
+        // typing "/" with hundreds of substring matches would queue dozens of
+        // overlapping animations as the list filled in.
+        viewModel.SearchResults.CollectionChanged += (_, _) => QueueSpotlightResize();
 
         _fullscreenCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _fullscreenCheckTimer.Tick += OnFullscreenCheck;
@@ -635,11 +657,62 @@ public partial class IslandWindow : Window
         UpdateRowVisibility();
     }
 
-    // ─── Fullscreen Detection ────────────────────────────────────
+    // ─── Fullscreen Detection + TopMost overrides ───────────────────
 
     private void OnFullscreenCheck(object? sender, EventArgs e)
     {
-        bool isFullscreen = User32.IsFullscreenAppRunning(_hwnd);
+        var (state, procName) = User32.GetForegroundWindowState(_hwnd);
+
+        // Auto-detect: remember any process we've seen go fullscreen / maximized
+        // so the Settings → "Always on top" combobox can offer it as a known
+        // candidate (mirrors how SeenNotificationApps works for notifications).
+        if (!string.IsNullOrEmpty(procName) &&
+            (state == User32.ForegroundState.Fullscreen || state == User32.ForegroundState.Maximized))
+        {
+            var seen = _viewModel.Settings.SeenFullscreenApps;
+            if (!seen.Contains(procName, StringComparer.OrdinalIgnoreCase))
+            {
+                seen.Add(procName);
+                try { _viewModel.SettingsManager.Save(); } catch { /* disk hiccup — try next time */ }
+            }
+        }
+
+        // First: check user-configured TopMost overrides. If the foreground
+        // process matches a rule AND its current state is one the rule covers,
+        // we keep ourselves visible + on top regardless of fullscreen.
+        bool forceTop = false;
+        if (!string.IsNullOrEmpty(procName))
+        {
+            foreach (var rule in _viewModel.Settings.TopmostOverrides)
+            {
+                if (string.IsNullOrWhiteSpace(rule.ProcessName)) continue;
+                if (!string.Equals(rule.ProcessName, procName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                bool stateMatches =
+                    (state == User32.ForegroundState.Fullscreen && rule.WhenFullscreen) ||
+                    (state == User32.ForegroundState.Maximized && rule.WhenMaximized);
+
+                if (stateMatches) { forceTop = true; break; }
+            }
+        }
+
+        if (forceTop)
+        {
+            // Cancel any prior auto-hide, then re-assert TopMost so Windows
+            // doesn't push us under the fullscreen/maximized app.
+            if (_hiddenByFullscreen)
+            {
+                _hiddenByFullscreen = false;
+                if (_viewModel.IsVisible) Show();
+            }
+            if (!Topmost) Topmost = true;
+            else { Topmost = false; Topmost = true; } // re-assert z-order
+            return;
+        }
+
+        // No override → default behaviour: hide while a fullscreen app is foreground.
+        bool isFullscreen = state == User32.ForegroundState.Fullscreen;
         if (isFullscreen && !_hiddenByFullscreen)
         {
             _hiddenByFullscreen = true;
@@ -1009,15 +1082,26 @@ public partial class IslandWindow : Window
 
     private void PositionVisualizerCircle()
     {
-        if (VisualizerCircle.Visibility != Visibility.Visible) return;
-
-        // Pill is HorizontalAlignment=Center in the Grid
-        // Circle goes 6px to the right of the pill's right edge
+        // Note: we DO NOT skip when the circle is hidden — keeping the Margin
+        // up to date while invisible means it appears in the right place
+        // immediately when it next becomes visible. The previous "early return
+        // if invisible" caused the circle to stick at the default Margin
+        // (0,0,0,0 — the far-left edge of the window) when audio kicked in
+        // mid-state-transition.
         var pillW = IslandBorder.ActualWidth;
         var gridW = ((Grid)IslandBorder.Parent).ActualWidth;
-        if (pillW <= 0 || gridW <= 0) return;
+        if (pillW <= 0 || gridW <= 0)
+        {
+            // Layout not ready (window briefly hidden, mid-animation) — retry
+            // once layout has actually run rather than silently giving up.
+            Dispatcher.BeginInvoke(new Action(PositionVisualizerCircle),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+            return;
+        }
 
-        double pillRight = (gridW + pillW) / 2; // right edge of centered pill
+        // Pill is HorizontalAlignment=Center in the outer Grid → its right edge
+        // sits at (gridWidth + pillWidth) / 2. Circle goes 6px past that.
+        double pillRight = (gridW + pillW) / 2;
         VisualizerCircle.Margin = new Thickness(pillRight + 6, 0, 0, 0);
     }
 

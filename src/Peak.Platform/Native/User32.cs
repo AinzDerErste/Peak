@@ -82,47 +82,87 @@ public static class User32
     /// covering the screen. Compares the foreground window's bounds against its
     /// monitor's full screen area. Ignores the desktop shell (explorer).
     /// </summary>
-    public static bool IsFullscreenAppRunning(IntPtr ownHwnd)
+    public static bool IsFullscreenAppRunning(IntPtr ownHwnd) =>
+        GetForegroundWindowState(ownHwnd).State == ForegroundState.Fullscreen;
+
+    /// <summary>
+    /// Returns the foreground window's process name (lower-cased, no ".exe") and
+    /// its rough state (Normal / Maximized / Fullscreen). Used by Peak's
+    /// TopMost-override logic so user-configured app rules can override the
+    /// default fullscreen-hide behaviour.
+    /// </summary>
+    public static (ForegroundState State, string ProcessName) GetForegroundWindowState(IntPtr ownHwnd)
     {
         try
         {
             var fgHwnd = GetForegroundWindow();
-
-            // Don't hide for our own window
             if (fgHwnd == IntPtr.Zero || fgHwnd == ownHwnd)
-                return false;
+                return (ForegroundState.Normal, "");
 
-            // Ignore the desktop / shell windows
             GetWindowThreadProcessId(fgHwnd, out uint pid);
+            string procName = "";
             try
             {
                 var proc = System.Diagnostics.Process.GetProcessById((int)pid);
-                var name = proc.ProcessName.ToLowerInvariant();
-                if (name is "explorer" or "searchhost" or "shellexperiencehost" or "startmenuexperiencehost")
-                    return false;
+                procName = proc.ProcessName.ToLowerInvariant();
             }
-            catch { /* process may have exited */ }
+            catch { /* process may have exited between GetForegroundWindow and now */ }
 
-            // Get the foreground window bounds
+            // Shell windows aren't "real" foreground apps — treat as Normal.
+            if (procName is "explorer" or "searchhost" or "shellexperiencehost" or "startmenuexperiencehost")
+                return (ForegroundState.Normal, procName);
+
             if (!GetWindowRect(fgHwnd, out RECT windowRect))
-                return false;
+                return (ForegroundState.Normal, procName);
 
-            // Get the monitor that the foreground window is on
             int monitor = MonitorFromWindow(fgHwnd, MONITOR_DEFAULTTONEAREST);
             var monitorInfo = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
             if (!GetMonitorInfo(monitor, ref monitorInfo))
-                return false;
+                return (ForegroundState.Normal, procName);
 
-            // Compare: is the foreground window covering the entire monitor?
+            // Fullscreen: window covers the entire monitor (including taskbar area).
             var screen = monitorInfo.rcMonitor;
-            return windowRect.Left <= screen.Left
+            bool fullscreen = windowRect.Left <= screen.Left
                 && windowRect.Top <= screen.Top
                 && windowRect.Right >= screen.Right
                 && windowRect.Bottom >= screen.Bottom;
+            if (fullscreen) return (ForegroundState.Fullscreen, procName);
+
+            // Maximized: ask Win32 directly via WindowPlacement.showCmd. Reliable
+            // even for borderless apps that match the work-area dimensions.
+            var placement = new WINDOWPLACEMENT { length = Marshal.SizeOf<WINDOWPLACEMENT>() };
+            if (GetWindowPlacement(fgHwnd, ref placement) && placement.showCmd == SW_MAXIMIZE)
+                return (ForegroundState.Maximized, procName);
+
+            return (ForegroundState.Normal, procName);
         }
         catch
         {
-            return false;
+            return (ForegroundState.Normal, "");
         }
+    }
+
+    public enum ForegroundState
+    {
+        Normal,
+        Maximized,
+        Fullscreen
+    }
+
+    private const int SW_MAXIMIZE = 3;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINDOWPLACEMENT
+    {
+        public int length;
+        public int flags;
+        public int showCmd;
+        public POINT ptMinPosition;
+        public POINT ptMaxPosition;
+        public RECT rcNormalPosition;
     }
 }

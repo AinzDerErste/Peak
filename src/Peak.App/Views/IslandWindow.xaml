@@ -391,11 +391,19 @@
                 <!-- Spotlight: search field + result list, takes the whole pill in Spotlight state.
                      Symmetric vertical margin so the search bar is visually centered inside the
                      IslandBorder padding when the results list is empty. -->
-                <!-- Spotlight overrides IslandBorder.Padding to "6,4" at runtime
-                     (see IslandWindow.xaml.cs SetContentVisibility) so the dark
-                     chrome hugs the search bar tight on ALL four sides. -->
+                <!-- Spotlight overrides IslandBorder.Padding to a uniform 6px at
+                     runtime (see SetContentVisibility) so the dark chrome hugs
+                     the search bar tight on all four sides.
+
+                     VerticalAlignment="Top" not "Center" — during the resize
+                     animation, if results suddenly grow the IslandBorder hasn't
+                     reached its target height yet, so center-aligning the
+                     larger Spotlight content would briefly push the search
+                     bar above the border's top edge and clip it. Top-anchoring
+                     keeps the search bar pinned at the top while results fill
+                     in below. -->
                 <Grid x:Name="SpotlightContent" Visibility="Collapsed"
-                      VerticalAlignment="Center">
+                      VerticalAlignment="Top">
                     <!-- Both rows Auto so the Grid sizes to its actual content. A `*` row
                          here would silently consume the IslandBorder's leftover height,
                          producing the asymmetric "search bar at top, empty space below"

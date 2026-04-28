@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
     private string _selectedAccentColor = "#FF60CDFF";
     private bool _suppressHexEvent;
     private readonly ObservableCollection<NotificationAppToggle> _notificationApps = new();
+    private readonly ObservableCollection<TopmostOverrideRule> _topmostOverrides = new();
     private uint _recordedHotkeyModifiers;
     private uint _recordedHotkeyVk;
     private string _recordedHotkeyDisplay = "";
@@ -107,6 +108,10 @@ public partial class SettingsWindow : Window
 
         // Notification apps
         LoadNotificationApps(s);
+
+        // Always-on-top overrides
+        LoadTopmostOverrides(s);
+        PopulateTopmostAppsCombo();
 
         // Plugins (inline: toggle + settings per card)
         BuildPluginList();
@@ -341,6 +346,115 @@ public partial class SettingsWindow : Window
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    // ─── Always-on-top overrides ────────────────────────────────
+
+    /// <summary>Hydrates the in-edit list from saved settings and binds the ItemsControl.</summary>
+    private void LoadTopmostOverrides(AppSettings s)
+    {
+        _topmostOverrides.Clear();
+        foreach (var rule in s.TopmostOverrides)
+        {
+            _topmostOverrides.Add(new TopmostOverrideRule
+            {
+                ProcessName = rule.ProcessName,
+                WhenFullscreen = rule.WhenFullscreen,
+                WhenMaximized = rule.WhenMaximized
+            });
+        }
+        TopmostOverridesList.ItemsSource = _topmostOverrides;
+        UpdateTopmostHintVisibility();
+    }
+
+    /// <summary>
+    /// Populates the picker with: (1) apps Peak has seen go fullscreen/maximized
+    /// historically (auto-detected at runtime, mirrors SeenNotificationApps),
+    /// then (2) currently-running apps with a window, deduplicated. Anything
+    /// already configured as an override is filtered out so the user can't add
+    /// duplicates. The combobox is editable too, so a manual entry still works.
+    /// </summary>
+    private void PopulateTopmostAppsCombo()
+    {
+        try
+        {
+            var alreadyConfigured = new HashSet<string>(
+                _topmostOverrides.Select(r => r.ProcessName),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Auto-detected — apps we've seen go fullscreen/maximized in past sessions.
+            var seen = _settingsManager.Settings.SeenFullscreenApps
+                .Where(n => !string.IsNullOrEmpty(n) && !alreadyConfigured.Contains(n))
+                .Select(n => n.ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            // Currently running with a window.
+            var ownPid = Environment.ProcessId;
+            var running = System.Diagnostics.Process.GetProcesses()
+                .Where(p =>
+                {
+                    try { return p.Id != ownPid && p.MainWindowHandle != IntPtr.Zero; }
+                    catch { return false; }
+                })
+                .Select(p => { try { return p.ProcessName.ToLowerInvariant(); } catch { return ""; } })
+                .Where(n => !string.IsNullOrEmpty(n) && !alreadyConfigured.Contains(n));
+
+            // Union, sorted alphabetically. Seen list comes first conceptually but
+            // since we sort anyway, all we care about is dedup.
+            var names = seen.Union(running, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            TopmostAppsCombo.ItemsSource = names;
+        }
+        catch
+        {
+            // Process enumeration can throw under restricted security contexts —
+            // leave the combo empty, the user can still type a name manually.
+        }
+    }
+
+    private void OnAddTopmostOverrideClick(object sender, RoutedEventArgs e)
+    {
+        // ComboBox is non-editable — read the selected item directly.
+        var name = (TopmostAppsCombo.SelectedItem as string ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(name)) return;
+
+        // Don't add duplicates.
+        if (_topmostOverrides.Any(r => string.Equals(r.ProcessName, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            TopmostAppsCombo.SelectedItem = null;
+            return;
+        }
+
+        _topmostOverrides.Add(new TopmostOverrideRule
+        {
+            ProcessName = name,
+            WhenFullscreen = true, // sensible default — fullscreen is the auto-hide trigger
+            WhenMaximized = false
+        });
+
+        // Refresh the dropdown so the just-added entry no longer appears in the
+        // picker (PopulateTopmostAppsCombo filters out anything in _topmostOverrides).
+        PopulateTopmostAppsCombo();
+        TopmostAppsCombo.SelectedItem = null;
+        UpdateTopmostHintVisibility();
+    }
+
+    private void OnRemoveTopmostOverride(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is TopmostOverrideRule rule)
+        {
+            _topmostOverrides.Remove(rule);
+            // Bring the removed app back to the picker so the user can re-add it.
+            PopulateTopmostAppsCombo();
+            UpdateTopmostHintVisibility();
+        }
+    }
+
+    private void UpdateTopmostHintVisibility()
+    {
+        NoTopmostOverridesHint.Visibility = _topmostOverrides.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private static readonly (CollapsedWidget Value, string Label)[] _collapsedOptions =
     [
         (CollapsedWidget.None, "None"),
@@ -458,6 +572,19 @@ public partial class SettingsWindow : Window
         // Notification apps: persist muted set from toggles
         s.MutedNotificationApps = new HashSet<string>(
             _notificationApps.Where(a => !a.IsEnabled).Select(a => a.AppName));
+
+        // Always-on-top overrides — copy the in-edit list back to settings.
+        // We persist only entries with a non-empty process name AND at least one
+        // state flag enabled, so accidental empty rows don't pollute settings.
+        s.TopmostOverrides = _topmostOverrides
+            .Where(r => !string.IsNullOrWhiteSpace(r.ProcessName) && (r.WhenFullscreen || r.WhenMaximized))
+            .Select(r => new TopmostOverrideRule
+            {
+                ProcessName = r.ProcessName.Trim().ToLowerInvariant(),
+                WhenFullscreen = r.WhenFullscreen,
+                WhenMaximized = r.WhenMaximized
+            })
+            .ToList();
 
         // Plugin enable/disable
         var newDisabled = new HashSet<string>();

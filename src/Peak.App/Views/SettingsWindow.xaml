@@ -214,6 +214,66 @@
             </Setter>
         </Style>
 
+        <!-- Modern Editable ComboBox — same look as ModernComboBox but the
+             template includes the PART_EditableTextBox WPF requires for
+             IsEditable="True" to actually display selected items + accept typing. -->
+        <Style x:Key="ModernEditableComboBox" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontFamily" Value="{StaticResource SegoeVar}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinWidth" Value="160" />
+            <Setter Property="IsEditable" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Bd" Background="{StaticResource InputBg}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                    CornerRadius="6" SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
+                                             Background="Transparent" Foreground="White" CaretBrush="White"
+                                             BorderThickness="0" Padding="12,8,4,8"
+                                             VerticalAlignment="Center" />
+                                    <ToggleButton Grid.Column="1" Focusable="False" Cursor="Hand"
+                                                  Background="Transparent" BorderThickness="0"
+                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  ClickMode="Press">
+                                        <Path Data="M0,0 L5,5 10,0" Stroke="#999" StrokeThickness="1.5"
+                                              VerticalAlignment="Center" Margin="8,0,10,0" />
+                                    </ToggleButton>
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="Popup" Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                <Border Background="#FF2A2A2A" BorderBrush="#FF444444"
+                                        BorderThickness="1" CornerRadius="8" Padding="4,6"
+                                        Margin="0,4,0,0" MinWidth="{TemplateBinding ActualWidth}">
+                                    <ScrollViewer SnapsToDevicePixels="True"
+                                                  VerticalScrollBarVisibility="Auto" MaxHeight="240">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#555" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ComboBoxItem -->
         <Style TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="White" />
@@ -715,6 +775,56 @@
                         </Border>
 
                         <!-- Notification Apps Mute List -->
+                        <!-- ═══ ALWAYS ON TOP OVERRIDES ═══ -->
+                        <TextBlock Text="ALWAYS ON TOP" Style="{StaticResource SectionHeader}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="By default Peak hides itself when a fullscreen app takes the foreground. Add an app here to keep Peak visible and on top while that app is running — pick whether the rule applies when the app is fullscreen, maximized, or both."
+                                           Style="{StaticResource SubLabel}" FontStyle="Italic" Margin="0,0,0,10"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl x:Name="TopmostOverridesList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,4,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding ProcessName}"
+                                                           Style="{StaticResource Label}" VerticalAlignment="Center" />
+                                                <CheckBox Grid.Column="1" Content="Fullscreen"
+                                                          IsChecked="{Binding WhenFullscreen, Mode=TwoWay}"
+                                                          Foreground="White" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                                <CheckBox Grid.Column="2" Content="Maximized"
+                                                          IsChecked="{Binding WhenMaximized, Mode=TwoWay}"
+                                                          Foreground="White" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                                <Button Grid.Column="3" Content="Remove"
+                                                        Style="{StaticResource SubtleButton}" Padding="8,2"
+                                                        Tag="{Binding}" Click="OnRemoveTopmostOverride"
+                                                        VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="NoTopmostOverridesHint"
+                                           Text="No apps yet — pick one below and click Add."
+                                           Style="{StaticResource SubLabel}" FontStyle="Italic" />
+                                <Border Style="{StaticResource CardSep}" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Add"
+                                            Style="{StaticResource AccentButton}" Padding="12,4"
+                                            Margin="8,0,0,0" Click="OnAddTopmostOverrideClick" />
+                                    <ComboBox x:Name="TopmostAppsCombo"
+                                              Style="{StaticResource ModernComboBox}" />
+                                </DockPanel>
+                                <TextBlock Text="Apps appear here once they go fullscreen or are currently running."
+                                           Style="{StaticResource SubLabel}" FontStyle="Italic"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="NOTIFICATION APPS" Style="{StaticResource SectionHeader}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>

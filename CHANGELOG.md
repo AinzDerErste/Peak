@@ -4,6 +4,22 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.6.0] — 2026-04
+
+### Added
+- **Always-on-top overrides** — new Settings section lets you pin Peak above specific apps. Each entry has separate Fullscreen / Maximized checkboxes so the rule fires only for the states you care about. Apps observed running fullscreen or maximized are auto-detected and offered in the picker (mirroring how the notification-apps list grows).
+- New `ModernEditableComboBox` style for any future editable dropdowns that want to match the non-editable `ModernComboBox` look.
+
+### Fixed
+- **Spotlight: search bar shifts upward when typing certain queries** — single-character substring matches (e.g. typing `/`) flooded the result list and the centered VerticalAlignment briefly clipped the search bar above the pill's top edge during the resize animation. Substring + acronym matching now requires at least 2 characters, and the SpotlightContent is top-anchored so it never escapes the pill.
+- **Spotlight resize jank** — rapid CollectionChanged bursts (one per ObservableCollection Add/Clear) used to queue dozens of overlapping animations. Resize requests are now coalesced into a single deferred animation per dispatcher cycle.
+- **Visualizer / call bubble spawning at the wrong location** — the helper that places the bubble next to the pill returned early when the bubble was hidden, so its Margin stayed at the default `(0,0,0,0)` and it appeared at the far-left edge of the window the next time it was shown. The Margin is now kept up to date even while invisible, with a layout-pass retry if measurements aren't ready yet.
+
+### Changed
+- TopMost override picker now uses the same dropdown style as the audio-device picker — click anywhere to open, no editable text field. Manual entry is no longer needed because auto-detect captures every app the user runs fullscreen or maximized.
+
+---
+
 ## [1.5.0] — 2026-04
 
 ### Added
