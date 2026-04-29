@@ -24,8 +24,24 @@ public class TeamSpeakWsClient : IDisposable
     // We track the channel the local user is in + all clients in that channel.
     public string? CurrentChannelId { get; private set; }
     public string? CurrentServerConnectionId { get; private set; }
+    public string? CurrentServerName { get; private set; }
+    /// <summary>
+    /// Stable cryptographic server identity (TS6 <c>serverUid</c>). Unlike
+    /// <see cref="CurrentServerConnectionId"/> — which is a per-session local
+    /// counter — this UID survives reconnects, so it's the right key for any
+    /// per-server settings the user wants to persist (e.g. AFK channel list).
+    /// </summary>
+    public string? CurrentServerUid { get; private set; }
     public string? LocalClientId { get; private set; }
     public ConcurrentDictionary<string, TsParticipant> Participants { get; } = new();
+
+    /// <summary>
+    /// Flat map (channelId → channelName) of every channel on the currently-
+    /// connected server. Populated during <c>ParseInitialState</c> from the
+    /// channelInfos.rootChannels tree the TS6 API hands us at auth time.
+    /// Cleared on disconnect. Used by the AFK-channel picker dialog.
+    /// </summary>
+    public ConcurrentDictionary<string, string> Channels { get; } = new();
 
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
@@ -36,6 +52,8 @@ public class TeamSpeakWsClient : IDisposable
     public event Action? ParticipantsChanged;
     public event Action<string, bool>? SpeakingChanged;
     public event Action<string>? ApiKeyReceived;
+    /// <summary>Fires whenever the <see cref="Channels"/> map is rebuilt (server connect / switch).</summary>
+    public event Action? ChannelsUpdated;
 
     public TeamSpeakWsClient(int port = 5899)
     {
@@ -173,6 +191,13 @@ public class TeamSpeakWsClient : IDisposable
         var status = node["status"];
         var statusCode = status?["code"]?.GetValue<int>() ?? -1;
 
+        // Best-effort: every TS6 event that carries server identity (serverName,
+        // serverUid) gets that captured here, regardless of message type. The
+        // exact event order varies between cached-key and fresh-auth flows, so
+        // doing it once centrally is more robust than scattering it across each
+        // handler.
+        TryCaptureServerIdentity(payload);
+
         switch (type)
         {
             case "auth":
@@ -204,6 +229,14 @@ public class TeamSpeakWsClient : IDisposable
 
             case "connectStatusChanged":
                 HandleConnectStatus(payload);
+                break;
+
+            // Standalone channel-tree push. Sent during cached-key auth flow
+            // (when the big auth-reply payload is replaced by piecemeal events).
+            // Without handling this, the Channels cache stays empty and the
+            // AFK picker can't show anything.
+            case "channels":
+                HandleChannelsEvent(payload);
                 break;
 
             default:
@@ -268,11 +301,35 @@ public class TeamSpeakWsClient : IDisposable
             if (connId == null) continue;
 
             CurrentServerConnectionId = connId;
+            // Empirically (TS6 v6.x) the auth-reply puts the server's display
+            // name and stable UID inside conn.properties: name + uniqueIdentifier.
+            CurrentServerName = GetString(conn["serverName"])
+                                ?? GetString(conn["properties"]?["serverName"])
+                                ?? GetString(conn["properties"]?["virtualserverName"])
+                                ?? GetString(conn["properties"]?["name"])
+                                ?? GetString(conn["info"]?["serverName"])
+                                ?? GetString(conn["name"]);
+            CurrentServerUid = GetString(conn["serverUid"])
+                               ?? GetString(conn["properties"]?["serverUid"])
+                               ?? GetString(conn["properties"]?["virtualserverUid"])
+                               ?? GetString(conn["properties"]?["virtualserverUniqueIdentifier"])
+                               ?? GetString(conn["properties"]?["uniqueIdentifier"])
+                               ?? GetString(conn["uniqueIdentifier"])
+                               ?? GetString(conn["info"]?["serverUid"]);
 
             // Find local client
             var ownClient = GetString(conn["clientId"]) ?? GetString(conn["ownClientId"]);
             if (!string.IsNullOrEmpty(ownClient))
                 LocalClientId = ownClient;
+
+            // Cache the full channel tree (id → name) so the AFK-picker dialog
+            // can show every channel on the server, not just the current one.
+            var channelTree = conn["channelInfos"]?["rootChannels"] as JsonArray;
+            if (channelTree != null)
+            {
+                Channels.Clear();
+                ExtractAllChannels(channelTree, Channels);
+            }
 
             // TS6 structure: clients are in "clientInfos" (NOT inside channels!)
             var clientInfos = conn["clientInfos"];
@@ -290,10 +347,9 @@ public class TeamSpeakWsClient : IDisposable
             // Fallback: try channels with nested clients (older TS API?)
             if (clientInfos == null && clients == null)
             {
-                var channelInfos = conn["channelInfos"]?["rootChannels"] as JsonArray;
-                if (channelInfos != null)
+                if (channelTree != null)
                 {
-                    var extracted = ExtractAllClients(channelInfos);
+                    var extracted = ExtractAllClients(channelTree);
                     foreach (var c in extracted)
                         ParseSingleClient(c);
                 }
@@ -308,9 +364,34 @@ public class TeamSpeakWsClient : IDisposable
                 Participants.TryRemove(key, out _);
         }
 
-        TeamSpeakLog.Write($"InitialState: server={CurrentServerConnectionId}, channel={CurrentChannelId}, localClient={LocalClientId}, participants={Participants.Count}");
+        TeamSpeakLog.Write($"InitialState: server={CurrentServerConnectionId} \"{CurrentServerName}\" uid={(CurrentServerUid ?? "<none>")}, channel={CurrentChannelId}, localClient={LocalClientId}, participants={Participants.Count}, channels={Channels.Count}");
+        ChannelsUpdated?.Invoke();
         VoiceChannelChanged?.Invoke();
         ParticipantsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Recursively walks TS6's channel tree and fills <paramref name="result"/>
+    /// with (channelId, channelName) pairs. Mirrors <see cref="ExtractAllClients"/>
+    /// but cares about the channels, not the people inside them.
+    /// </summary>
+    private static void ExtractAllChannels(JsonArray channels, ConcurrentDictionary<string, string> result)
+    {
+        foreach (var ch in channels)
+        {
+            if (ch == null) continue;
+            var id = GetString(ch["id"]);
+            var name = GetString(ch["name"])
+                       ?? GetString(ch["properties"]?["name"])
+                       ?? id;
+
+            if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(name))
+                result[id] = name;
+
+            // Recurse into subChannels.
+            if (ch["subChannels"] is JsonArray subChannels)
+                ExtractAllChannels(subChannels, result);
+        }
     }
 
     /// <summary>Parse the "clientInfos" node from TS6 auth response. Can be an array or object keyed by clientId.</summary>
@@ -559,13 +640,86 @@ public class TeamSpeakWsClient : IDisposable
         var status = GetString(payload?["status"]) ?? GetString(payload?["connectionStatus"]);
         TeamSpeakLog.Write($"ConnectStatus: {status}");
 
-        if (status is "disconnected" or "connectionLost")
+        // TS6 emits status="2" once it has the basic server info (clientId,
+        // serverName, serverUid). Capture those so the AFK picker has a real
+        // server identity to attach the channel list to even on cached-key
+        // reconnects (where the big auth payload doesn't arrive).
+        if (status == "2")
+        {
+            var connId = GetString(payload?["connectionId"]);
+            if (!string.IsNullOrEmpty(connId)) CurrentServerConnectionId = connId;
+
+            var info = payload?["info"];
+            var name = GetString(info?["serverName"]);
+            if (!string.IsNullOrEmpty(name)) CurrentServerName = name;
+            var uid = GetString(info?["serverUid"]);
+            if (!string.IsNullOrEmpty(uid)) CurrentServerUid = uid;
+            var clientId = GetString(info?["clientId"]);
+            if (!string.IsNullOrEmpty(clientId)) LocalClientId = clientId;
+        }
+
+        if (status is "disconnected" or "connectionLost" or "0")
         {
             CurrentChannelId = null;
             CurrentServerConnectionId = null;
+            CurrentServerName = null;
+            CurrentServerUid = null;
             Participants.Clear();
+            Channels.Clear();
             VoiceChannelChanged?.Invoke();
             ParticipantsChanged?.Invoke();
+            ChannelsUpdated?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Pulls <c>serverName</c> / <c>serverUid</c> / <c>connectionId</c> out of
+    /// any payload that happens to carry them — TS6 sprinkles this info across
+    /// several event types (connectStatusChanged, channels, serverPropertiesUpdated,
+    /// auth reply, …) and the order varies. This way whichever event arrives
+    /// first sets the identity, later ones just reaffirm.
+    /// </summary>
+    private void TryCaptureServerIdentity(JsonNode? payload)
+    {
+        if (payload == null) return;
+
+        var connId = GetString(payload["connectionId"]);
+        if (!string.IsNullOrEmpty(connId)) CurrentServerConnectionId = connId;
+
+        // Server name + UID can be at the top level OR nested in "info" / "properties"
+        // depending on the event type. Try each location.
+        var name = GetString(payload["serverName"])
+                   ?? GetString(payload["info"]?["serverName"])
+                   ?? GetString(payload["properties"]?["serverName"])
+                   ?? GetString(payload["properties"]?["virtualserverName"]);
+        if (!string.IsNullOrEmpty(name)) CurrentServerName = name;
+
+        var uid = GetString(payload["serverUid"])
+                  ?? GetString(payload["info"]?["serverUid"])
+                  ?? GetString(payload["properties"]?["serverUid"])
+                  ?? GetString(payload["properties"]?["virtualserverUid"])
+                  ?? GetString(payload["properties"]?["uniqueIdentifier"]);
+        if (!string.IsNullOrEmpty(uid)) CurrentServerUid = uid;
+    }
+
+    /// <summary>
+    /// Handles the standalone <c>channels</c> push that TS6 sends after a
+    /// cached-key auth (the channel tree never appears in the auth reply in
+    /// that flow). Repopulates the in-memory <see cref="Channels"/> cache.
+    /// </summary>
+    private void HandleChannelsEvent(JsonNode? payload)
+    {
+        if (payload == null) return;
+
+        var connId = GetString(payload["connectionId"]);
+        if (!string.IsNullOrEmpty(connId)) CurrentServerConnectionId = connId;
+
+        if (payload["info"]?["rootChannels"] is JsonArray roots)
+        {
+            Channels.Clear();
+            ExtractAllChannels(roots, Channels);
+            TeamSpeakLog.Write($"Channels event: cached {Channels.Count} channels for server {CurrentServerConnectionId}");
+            ChannelsUpdated?.Invoke();
         }
     }
 

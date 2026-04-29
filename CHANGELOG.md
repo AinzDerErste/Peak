@@ -4,6 +4,18 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.7.0] — 2026-04
+
+### Added
+- **TeamSpeak — per-server AFK channels** — flag up to 3 channels of any TS server as "AFK". While you're sitting in one of them, Peak suppresses the call counter and the active-speaker visualizer. The picker is reachable from the plugin settings via a new "Manage AFK channels…" button (with a location-pin glyph) and from the plugin's widget view.
+- TeamSpeak plugin now caches the full channel tree per server — needed for the AFK picker, also opens the door for richer per-channel features later.
+
+### Fixed
+- **TeamSpeak — server identity now stable across reconnects** — the plugin previously keyed per-server settings by the per-session `connectionId`, which changes every time TeamSpeak reconnects. Switched to the cryptographic `serverUid` (extracted from `connectStatusChanged.info` AND `connections[].properties.uniqueIdentifier` so both auth flows work).
+- TeamSpeak plugin now handles the standalone `channels` event TS6 emits during cached-API-key reconnects — without this the channel cache stayed empty and the AFK picker showed "channels not ready".
+
+---
+
 ## [1.6.0] — 2026-04
 
 ### Added

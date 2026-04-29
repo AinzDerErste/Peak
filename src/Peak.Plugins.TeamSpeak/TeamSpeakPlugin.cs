@@ -36,22 +36,52 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         return JsonSerializer.SerializeToElement(_settings);
     }
 
+    // FontAwesome map-pin (location), viewBox 0 0 384 512 — used by the inline
+    // "Manage AFK channels" affordance in the plugin's widget view.
+    private const string LocationPinPath =
+        "M215.7 499.2C267 435 384 279.4 384 192C384 86 298 0 192 0S0 86 0 192" +
+        "c0 87.4 117 243 168.3 307.2c12.3 15.3 35.1 15.3 47.4 0z" +
+        "M192 128a64 64 0 1 1 0 128 64 64 0 1 1 0-128z";
+
     public FrameworkElement CreateView(object dataContext)
     {
+        // Layout: [pin icon] [label]   — clicking either opens the AFK picker.
         var panel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = "Manage AFK channels for the current server"
         };
+
+        var iconCanvas = new Canvas { Width = 384, Height = 512 };
+        iconCanvas.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse(LocationPinPath),
+            Fill = new SolidColorBrush(Color.FromRgb(0x60, 0xCD, 0xFF))
+        });
+        var pinIcon = new Viewbox
+        {
+            Child = iconCanvas,
+            Width = 14, Height = 14,
+            Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0)
+        };
+
         var label = new TextBlock
         {
-            Text = "TeamSpeak plugin ready",
+            Text = "AFK channels",
             Foreground = Brushes.White,
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center
         };
+
+        panel.Children.Add(pinIcon);
         panel.Children.Add(label);
+        // Whole panel is the click target, including the icon — keeps it forgiving.
+        panel.MouseLeftButtonUp += (_, _) => OpenAfkChannelsDialog();
         return panel;
     }
 
@@ -60,25 +90,42 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
 
     // --- IPluginSettingsProvider ---
 
-    public IReadOnlyList<PluginSettingField> GetSettingsSchema() =>
-    [
-        new PluginSettingField
+    public IReadOnlyList<PluginSettingField> GetSettingsSchema()
+    {
+        var afkLabel = "Manage AFK channels…";
+        if (_client?.CurrentServerUid is { } sid &&
+            _settings.AfkChannelsByServer.TryGetValue(sid, out var list) && list.Count > 0)
         {
-            Key = "Port",
-            Label = "Remote Apps Port",
-            Description = "TeamSpeak 6 Remote Applications WebSocket port (default: 5899). Check TS6 Settings > Remote Apps.",
-            Kind = PluginSettingFieldKind.Number,
-            CurrentValue = _settings.Port.ToString(),
-            Placeholder = "5899"
-        },
-        new PluginSettingField
-        {
-            Key = "ResetApiKey",
-            Label = "Reset API Key",
-            Description = "Clears the saved API key and reconnects. TeamSpeak will ask you to re-approve Peak Notch.",
-            Kind = PluginSettingFieldKind.Button
+            afkLabel = $"Manage AFK channels ({list.Count})…";
         }
-    ];
+
+        return new[]
+        {
+            new PluginSettingField
+            {
+                Key = "Port",
+                Label = "Remote Apps Port",
+                Description = "TeamSpeak 6 Remote Applications WebSocket port (default: 5899). Check TS6 Settings > Remote Apps.",
+                Kind = PluginSettingFieldKind.Number,
+                CurrentValue = _settings.Port.ToString(),
+                Placeholder = "5899"
+            },
+            new PluginSettingField
+            {
+                Key = "ResetApiKey",
+                Label = "Reset API Key",
+                Description = "Clears the saved API key and reconnects. TeamSpeak will ask you to re-approve Peak Notch.",
+                Kind = PluginSettingFieldKind.Button
+            },
+            new PluginSettingField
+            {
+                Key = "ManageAfkChannels",
+                Label = afkLabel,
+                Description = "Pick up to 3 channels per server that count as 'AFK'. While you're in one of these, Peak hides the call counter and active-speaker visualizer.",
+                Kind = PluginSettingFieldKind.Button
+            }
+        };
+    }
 
     public void SetSettingValue(string key, string? value)
     {
@@ -99,6 +146,77 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
             _reconnectCts = new CancellationTokenSource();
             _ = Task.Run(() => ConnectLoopAsync(_reconnectCts.Token));
         }
+        else if (key == "ManageAfkChannels")
+        {
+            OpenAfkChannelsDialog();
+        }
+    }
+
+    /// <summary>
+    /// Opens the WPF picker dialog so the user can flag up to 3 channels of
+    /// the currently-connected server as AFK. Persists straight to settings
+    /// when the dialog confirms, then re-evaluates the suppression so the
+    /// counter / visualizer reflect the new state right away.
+    /// </summary>
+    private void OpenAfkChannelsDialog()
+    {
+        if (_host == null) return;
+
+        // The dialog touches WPF, so it has to run on the UI dispatcher.
+        _host.UiDispatcher.Invoke(() =>
+        {
+            try
+            {
+                if (_client == null || string.IsNullOrEmpty(_client.CurrentServerUid))
+                {
+                    MessageBox.Show(
+                        "Connect to a TeamSpeak server first — the picker needs the server's channel list.",
+                        "No server connected", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                if (_client.Channels.IsEmpty)
+                {
+                    MessageBox.Show(
+                        "No channels are cached yet. Wait a moment for the initial sync, then try again.",
+                        "Channels not ready", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var serverKey = _client.CurrentServerUid!;
+                _settings.AfkChannelsByServer.TryGetValue(serverKey, out var current);
+
+                var dlg = new AfkChannelsDialog(
+                    _client.CurrentServerName ?? "TeamSpeak server",
+                    _client.Channels.OrderBy(kv => kv.Value, StringComparer.OrdinalIgnoreCase).ToList(),
+                    current ?? new List<string>())
+                {
+                    Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                };
+
+                if (dlg.ShowDialog() == true)
+                {
+                    _settings.AfkChannelsByServer[serverKey] = dlg.SelectedChannelIds.ToList();
+                    try { _host?.RequestSettingsSave(); } catch { }
+
+                    // Re-run suppression logic with the fresh list so the UI reflects
+                    // any change without waiting for the next TS event.
+                    OnParticipantsChanged();
+                    OnVoiceChannelChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log AND show — silent crashes during plugin UI are the worst.
+                TeamSpeakLog.Write($"AFK dialog crashed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                try
+                {
+                    MessageBox.Show(
+                        $"AFK dialog failed to open:\n\n{ex.Message}\n\n(See plugin.log for details.)",
+                        "Peak — TeamSpeak plugin", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+            }
+        });
     }
 
     // --- IIslandIntegrationPlugin ---
@@ -219,8 +337,10 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         if (_client == null) return;
         _speakingNow.Clear();
 
-        if (string.IsNullOrEmpty(_client.CurrentChannelId))
+        if (string.IsNullOrEmpty(_client.CurrentChannelId) || IsLocalUserInAfkChannel())
         {
+            // Either not in any voice channel, or sitting in a designated AFK
+            // channel — clear the visualizer entirely.
             _host?.SetVisualizerOverride(null);
         }
         else
@@ -233,7 +353,11 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
     private void OnParticipantsChanged()
     {
         if (_client == null) return;
-        int count = _client.Participants.Count;
+
+        // Suppress the call counter while the local user is in an AFK channel.
+        // The count snaps to 0 (and the collapsed slot's display goes blank) so
+        // Peak doesn't advertise an active call when the user is just parking.
+        int count = IsLocalUserInAfkChannel() ? 0 : _client.Participants.Count;
         _host?.SetViewModelProperty("TeamSpeakCallCount", count);
         _host?.SetViewModelProperty("TeamSpeakCallCountDisplay", count > 0 ? count.ToString() : "");
         _host?.RefreshCollapsedSlots();
@@ -242,6 +366,15 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
     private void OnSpeakingChanged(string clientId, bool speaking)
     {
         if (_client == null || string.IsNullOrEmpty(clientId)) return;
+
+        // While in an AFK channel, ignore speaker events entirely so the
+        // visualizer never lights up.
+        if (IsLocalUserInAfkChannel())
+        {
+            _speakingNow.Clear();
+            _host?.SetVisualizerOverride(null);
+            return;
+        }
 
         if (speaking)
         {
@@ -267,6 +400,24 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
                     ShowSpeaker(p.Nickname);
             }
         }
+    }
+
+    /// <summary>
+    /// True if the local user is currently sitting in one of the channels the
+    /// user has flagged as AFK for the active server. Keyed by the stable
+    /// <see cref="TeamSpeakWsClient.CurrentServerUid"/> (cryptographic server
+    /// identity) so the rule survives reconnects — the per-session
+    /// <c>connectionId</c> would not.
+    /// </summary>
+    private bool IsLocalUserInAfkChannel()
+    {
+        if (_client == null) return false;
+        var serverKey = _client.CurrentServerUid;
+        var channelId = _client.CurrentChannelId;
+        if (string.IsNullOrEmpty(serverKey) || string.IsNullOrEmpty(channelId)) return false;
+
+        if (!_settings.AfkChannelsByServer.TryGetValue(serverKey, out var afkList)) return false;
+        return afkList.Contains(channelId, StringComparer.OrdinalIgnoreCase);
     }
 
     private void OnApiKeyReceived(string apiKey)
