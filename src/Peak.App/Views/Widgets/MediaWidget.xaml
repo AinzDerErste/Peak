@@ -11,11 +11,37 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Width="56" Height="56" CornerRadius="10" Margin="0,0,10,0">
-                    <Border.Background>
-                        <ImageBrush ImageSource="{Binding AlbumArt}" Stretch="UniformToFill" />
-                    </Border.Background>
-                </Border>
+                <Grid Width="56" Height="56" Margin="0,0,10,0">
+                    <Border CornerRadius="10">
+                        <Border.Background>
+                            <ImageBrush ImageSource="{Binding AlbumArt}" Stretch="UniformToFill" />
+                        </Border.Background>
+                    </Border>
+                    <!-- LIVE overlay badge — centered on the bottom edge of the
+                         artwork, hanging ~4px below it for a ribbon look. -->
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            Margin="0,0,0,-4"
+                            Background="#FFE74C3C" CornerRadius="3" Padding="4,1"
+                            Visibility="{Binding IsLiveStream, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="5" Height="5" Fill="White" VerticalAlignment="Center" Margin="0,0,4,0">
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard RepeatBehavior="Forever">
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                From="1.0" To="0.35" Duration="0:0:0.9"
+                                                                AutoReverse="True" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                            <TextBlock Text="LIVE" Foreground="White" FontSize="9" FontWeight="Bold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding MediaTitle}" Foreground="White" FontSize="13"
                                FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -34,24 +60,30 @@
                     </StackPanel>
                 </StackPanel>
             </Grid>
-            <!-- Progress bar + time -->
-            <Grid Margin="0,6,0,0">
+            <!-- Progress bar + time (only for finite-duration tracks).
+                 Time column has a fixed Width so the bar doesn't reflow as the
+                 digits change (e.g. "1:23 / 3:45" → "12:34 / 12:34"). -->
+            <Grid Margin="0,6,0,0"
+                  Visibility="{Binding HasMediaProgress, Converter={StaticResource BoolToVisibility}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="80" />
                 </Grid.ColumnDefinitions>
-                <!-- Track bar: background + fill via ScaleTransform -->
-                <Border Height="3" CornerRadius="1.5" Background="#33FFFFFF" VerticalAlignment="Center">
-                    <Border CornerRadius="1.5" Background="{DynamicResource AccentBrush}"
-                            HorizontalAlignment="Stretch" RenderTransformOrigin="0,0.5">
-                        <Border.RenderTransform>
-                            <ScaleTransform ScaleX="{Binding MediaProgress}" />
-                        </Border.RenderTransform>
-                    </Border>
+                <!-- Track + fill. The fill uses an animated Width (not a
+                     ScaleTransform) so its rounded corners stay at full radius
+                     regardless of fill amount — at low progress, scaling would
+                     shrink the left corner's horizontal radius to near-zero
+                     and visually flatten it into a sharp edge. -->
+                <Border x:Name="ProgressTrack" Height="5" CornerRadius="2.5"
+                        Background="#33FFFFFF" VerticalAlignment="Center">
+                    <Border x:Name="ProgressFill" CornerRadius="2.5"
+                            Background="{DynamicResource AccentBrush}"
+                            HorizontalAlignment="Left" Width="0" />
                 </Border>
-                <TextBlock Grid.Column="1" Text="{Binding MediaPositionText}" Foreground="#66FFFFFF" FontSize="9"
-                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBlock Grid.Column="1" Text="{Binding MediaPositionText}" Foreground="#99FFFFFF" FontSize="10"
+                           VerticalAlignment="Center" TextAlignment="Right" Margin="8,0,0,0" />
             </Grid>
+
         </StackPanel>
         <!-- No media placeholder -->
         <TextBlock Text="No media playing" Foreground="#44FFFFFF" FontSize="12"

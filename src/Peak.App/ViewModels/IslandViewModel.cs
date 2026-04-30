@@ -56,6 +56,7 @@ public partial class IslandViewModel : ObservableObject
     [ObservableProperty] private BitmapImage? _albumArt;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PeekShowsMedia))]
+    [NotifyPropertyChangedFor(nameof(IsLiveStream))]
     private bool _hasMedia;
 
     // System
@@ -124,7 +125,15 @@ public partial class IslandViewModel : ObservableObject
     // Media progress
     [ObservableProperty] private double _mediaProgress; // 0.0 – 1.0
     [ObservableProperty] private string _mediaPositionText = string.Empty; // e.g. "1:23 / 3:45"
-    [ObservableProperty] private bool _hasMediaProgress; // true when Duration > 0
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLiveStream))]
+    private bool _hasMediaProgress; // true when Duration > 0
+    /// <summary>
+    /// True when something is playing but it has no finite duration — i.e. a
+    /// livestream (Twitch / YouTube Live / radio). The Media widget swaps the
+    /// empty progress bar for a "LIVE" badge in this case.
+    /// </summary>
+    public bool IsLiveStream => HasMedia && !HasMediaProgress;
 
     // Network
     [ObservableProperty] private string _downloadSpeed = "0 B/s";

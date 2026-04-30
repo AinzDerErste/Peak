@@ -4,6 +4,21 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.8.0] — 2026-04
+
+### Added
+- **Media: livestream badge** — when the currently-playing item has no finite duration (Twitch / YouTube Live / radio), the progress bar is replaced by a Twitch-style red "LIVE" pill overlaid on the bottom of the album art.
+- **Media: smooth progress animation** — the fill bar now interpolates between the once-per-second `MediaProgress` samples via a 900 ms cubic-ease-out animation so the playhead glides instead of ticking.
+- **Plugin development guide** — full walkthrough in `README.md`: project setup boilerplate, lifecycle hooks, the `IIslandHost` API surface, settings persistence, and the gotchas around `AssemblyLoadContext` + WPF BAML loading.
+
+### Changed
+- **Media: fixed-width time column (80 px, right-aligned)** — switching tracks no longer reflows the progress bar as the digit count changes.
+- **Media: progress bar redesigned** — bumped from 3 px to 5 px tall, and the fill now uses an animated `Width` (not a `ScaleTransform`) so both ends stay properly rounded at low progress values.
+- **Media: time text** — bumped from 9 pt @ 40 % opacity to 10 pt @ 60 % opacity for readability.
+- **Media slot sizing** — 100 px when a track is playing, automatically shaved to 90 px during a livestream so the missing progress bar doesn't leave a visible gap below the album art.
+
+---
+
 ## [1.7.0] — 2026-04
 
 ### Added

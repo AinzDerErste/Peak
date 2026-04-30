@@ -444,6 +444,15 @@ public partial class IslandWindow : Window
             var leftSlot = GetSlot(i * 2);
             var rightSlot = _viewModel.GetRowMode(i) == RowMode.Wide ? WidgetType.None : GetSlot(i * 2 + 1);
             rowHeights[i] = Math.Max(GetWidgetHeight(leftSlot), GetWidgetHeight(rightSlot));
+
+            // Livestream mode hides the progress bar — the row only needs the
+            // album-art-and-controls block, so shave the breathing room when a
+            // Media slot in this row is currently showing a livestream.
+            // Lands at 85 in live (95 - 10).
+            bool rowHasMedia = leftSlot == WidgetType.Media || rightSlot == WidgetType.Media;
+            if (rowHasMedia && _viewModel.IsLiveStream)
+                rowHeights[i] -= 10;
+
             // Edit mode needs room for ComboBoxes
             if (_viewModel.IsEditMode && rowHeights[i] < 55) rowHeights[i] = 55;
             _widgetRows[i].Height = rowHeights[i];
@@ -469,8 +478,12 @@ public partial class IslandWindow : Window
         WidgetType.Network => 70,
         WidgetType.Timer => 60,
         WidgetType.Pomodoro => 60,
-        // Content-heavy: need more vertical space
-        WidgetType.Media => 95,
+        // Content-heavy: need more vertical space.
+        // Media: album art row (~62 with title+artist+controls stacked) +
+        // 6 margin + 18 progress block ≈ 86. 100 leaves a comfortable gap so
+        // the progress bar doesn't sit flush against the slot's bottom edge.
+        // Livestream mode shaves ~10 dynamically — see UpdateRowVisibility.
+        WidgetType.Media => 100,
         WidgetType.Calendar => 100,
         WidgetType.QuickAccess => 100,
         WidgetType.Clipboard => 100,
@@ -1462,6 +1475,9 @@ public partial class IslandWindow : Window
             Dispatcher.Invoke(() => SetEditModeVisibility(_viewModel.IsEditMode));
         else if (e.PropertyName == nameof(IslandViewModel.HasNotification))
             Dispatcher.Invoke(() => UpdateNotificationBanner());
+        else if (e.PropertyName == nameof(IslandViewModel.IsLiveStream))
+            // Livestream toggle changes the Media row's height (no progress bar).
+            Dispatcher.Invoke(UpdateRowVisibility);
         else if (e.PropertyName is "Row0Mode" or "Row1Mode" or "Row2Mode")
         {
             var row = int.Parse(e.PropertyName![3..4]);
