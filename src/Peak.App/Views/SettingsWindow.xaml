@@ -599,8 +599,22 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Text="Quick theme selection" Style="{StaticResource SubLabel}" Margin="0,0,0,8" />
+                                <TextBlock Text="Quick theme selection — built-ins plus any user themes from %AppData%\Peak\themes\"
+                                           Style="{StaticResource SubLabel}" Margin="0,0,0,8" TextWrapping="Wrap" />
                                 <WrapPanel x:Name="ThemePresetsPanel" Orientation="Horizontal" />
+                                <Border Style="{StaticResource CardSep}" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Reload"
+                                            Style="{StaticResource SubtleButton}" Padding="12,4"
+                                            Margin="8,0,0,0" Click="OnReloadThemesClick"
+                                            ToolTip="Re-scan the user themes folder" />
+                                    <Button DockPanel.Dock="Right" Content="Open themes folder"
+                                            Style="{StaticResource SubtleButton}" Padding="12,4"
+                                            Click="OnOpenThemesFolderClick" />
+                                    <TextBlock Text="Drop a *.json file in this folder to add a custom theme."
+                                               Style="{StaticResource SubLabel}" FontStyle="Italic"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
                             </StackPanel>
                         </Border>
 

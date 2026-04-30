@@ -4,6 +4,15 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.9.0] — 2026-04
+
+### Added
+- **User-supplied themes** — drop a JSON file into `%AppData%\Peak\themes\` to add a custom theme. Format: `{ "id", "name", "background", "accent" }`. New `ThemeService` merges built-ins with user themes; user themes get a coloured outer ring in the picker so they're distinguishable.
+- **"Open themes folder" / "Reload"** buttons in Settings → Theme Presets — no restart required to pick up a new JSON.
+- **Theme authoring guide** in `README.md` covering format, loading, and tips.
+
+---
+
 ## [1.8.0] — 2026-04
 
 ### Added

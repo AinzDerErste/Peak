@@ -153,6 +153,45 @@ Peak stores plugin settings as a JSON blob inside `AppSettings.PluginSettings[<y
 - **No `Application.Current` assumptions.** Use `host.UiDispatcher`, not `Application.Current.Dispatcher`, to thread-marshal — the latter works today but ties you to Peak's process layout.
 - **Plugins can't reference `Peak.Core` or `Peak.App`.** Anything you need from the host travels through `IIslandHost`. If you find yourself reaching for an internal type, that's a signal to add an SDK method — open an issue.
 
+## Theme Development
+
+Peak ships with seven built-in themes (`default`, `midnight`, `forest`, `sunset`, `ocean`, `rose`, `snow`). User themes are JSON files dropped into `%AppData%\Peak\themes\` — no compilation required.
+
+### Format
+
+Create a file like `%AppData%\Peak\themes\my-theme.json`:
+
+```json
+{
+  "id": "my-theme",
+  "name": "My Theme",
+  "background": "#FF101820",
+  "accent": "#FFFFB454"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | no | Stable lookup key (defaults to the filename without `.json`). |
+| `name` | no | Display label in the Settings UI (defaults to `id`). |
+| `background` | yes | Pill background colour in `#AARRGGBB` hex. Alpha `FF` = opaque. |
+| `accent` | yes | Accent colour for progress bars, highlights, etc. |
+
+The colour parser is WPF's `ColorConverter`, so any of these forms work: `#FF101820`, `#101820`, `#101`, or named colours like `Black`. Always include alpha when you want full opacity (`#FF...`) — bare `#101820` is treated as 100 % alpha but the explicit form is clearer.
+
+### Loading
+
+- Open Settings → **THEME PRESETS** → click **Reload** after adding a JSON file (or restart Peak).
+- The **Open themes folder** button launches Explorer pointed at the right directory.
+- User themes appear after the built-ins in the swatch list, with a coloured outer ring (matching their accent) so they're visually distinguishable.
+- A user theme whose `id` collides with a built-in is silently ignored — built-ins are protected so the dropdown always has the defaults available.
+
+### Tips
+
+- The accent colour is used everywhere progress shows: media bar, system-monitor bars, settings buttons, divider highlights. Pick something with enough contrast against the background.
+- Backgrounds with low alpha (`#80...`) make the pill semi-transparent — fun, but text legibility suffers fast.
+- Browse the existing presets in `src/Peak.Core/Configuration/ThemePresets.cs` for inspiration.
+
 ## AI Disclaimer
 
 This is a personal hobby project. AI (Claude) was used to assist with implementation since WPF can be verbose and ceremonious.

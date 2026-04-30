@@ -71,6 +71,7 @@ public partial class App : Application
                     services.AddSingleton<VolumeMixerService>();
                     services.AddSingleton<PomodoroService>();
                     services.AddSingleton<SearchService>();
+                    services.AddSingleton<Peak.Core.Theming.ThemeService>();
                     services.AddSingleton<WidgetRegistry>();
                     services.AddSingleton<IslandViewModel>();
                     services.AddSingleton<IslandWindow>();

@@ -654,22 +654,33 @@ public partial class SettingsWindow : Window
         _selectedThemePreset = activePreset;
         ThemePresetsPanel.Children.Clear();
 
-        foreach (var (name, (bg, accent)) in ThemePresets.GetAll())
+        var themeService = ((App)Application.Current).Services
+            .GetRequiredService<Peak.Core.Theming.ThemeService>();
+
+        foreach (var theme in themeService.GetAll())
         {
-            var bgColor = (Color)ColorConverter.ConvertFromString(bg);
-            var accentColor = (Color)ColorConverter.ConvertFromString(accent);
+            var bgColor = (Color)ColorConverter.ConvertFromString(theme.Background);
+            var accentColor = (Color)ColorConverter.ConvertFromString(theme.Accent);
 
             var grid = new Grid { Width = 44, Height = 44, Margin = new Thickness(0, 0, 8, 8), Cursor = Cursors.Hand };
-            grid.Tag = name;
+            grid.Tag = theme.Id;
             grid.MouseDown += OnThemePresetClick;
+            // Tooltip shows the source — useful for distinguishing user themes
+            // from built-ins when their names are similar.
+            grid.ToolTip = theme.IsBuiltIn ? $"{theme.Name} (built-in)" : $"{theme.Name} (user)";
 
-            // Background circle
+            // Background circle. User themes get a thin accent-coloured outer
+            // ring so they're visually distinct from built-ins at a glance.
             var bgCircle = new Ellipse
             {
                 Width = 36, Height = 36,
                 Fill = new SolidColorBrush(bgColor),
-                Stroke = name == activePreset ? Brushes.White : new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)),
-                StrokeThickness = name == activePreset ? 2 : 1
+                Stroke = theme.Id == activePreset
+                    ? Brushes.White
+                    : (theme.IsBuiltIn
+                        ? new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF))
+                        : new SolidColorBrush(accentColor)),
+                StrokeThickness = theme.Id == activePreset ? 2 : 1
             };
             grid.Children.Add(bgCircle);
 
@@ -686,7 +697,7 @@ public partial class SettingsWindow : Window
             // Label
             var label = new TextBlock
             {
-                Text = char.ToUpper(name[0]) + name[1..],
+                Text = theme.Name,
                 Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
                 FontSize = 8,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -699,22 +710,51 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>Opens %AppData%\Peak\themes\ in Explorer so the user can drop JSON themes in.</summary>
+    private void OnOpenThemesFolderClick(object sender, RoutedEventArgs e)
+    {
+        var themeService = ((App)Application.Current).Services
+            .GetRequiredService<Peak.Core.Theming.ThemeService>();
+        try
+        {
+            // Make sure the folder exists before we hand it to Explorer.
+            System.IO.Directory.CreateDirectory(themeService.ThemesDirectory);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = themeService.ThemesDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch { /* explorer.exe almost never fails — silently ignore */ }
+    }
+
+    /// <summary>Re-scans the themes folder and rebuilds the swatch list without restarting Peak.</summary>
+    private void OnReloadThemesClick(object sender, RoutedEventArgs e)
+    {
+        var themeService = ((App)Application.Current).Services
+            .GetRequiredService<Peak.Core.Theming.ThemeService>();
+        themeService.Refresh();
+        BuildThemePresets(_selectedThemePreset);
+    }
+
     private void OnThemePresetClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Grid grid || grid.Tag is not string name) return;
+        if (sender is not Grid grid || grid.Tag is not string id) return;
 
-        var preset = ThemePresets.GetPreset(name);
-        if (preset == null) return;
+        var themeService = ((App)Application.Current).Services
+            .GetRequiredService<Peak.Core.Theming.ThemeService>();
+        var theme = themeService.GetById(id);
+        if (theme == null) return;
 
-        _selectedThemePreset = name;
-        _selectedBgColor = preset.Value.Background;
-        _selectedAccentColor = preset.Value.Accent;
+        _selectedThemePreset = theme.Id;
+        _selectedBgColor = theme.Background;
+        _selectedAccentColor = theme.Accent;
 
         HighlightColorCircle(BgColorPanel, _selectedBgColor);
         HighlightColorCircle(AccentColorPanel, _selectedAccentColor);
         UpdateHexBoxes();
         App.UpdateThemeColors(_selectedBgColor, _selectedAccentColor);
-        BuildThemePresets(name); // refresh highlights
+        BuildThemePresets(theme.Id); // refresh highlights
     }
 
     private void OnBgColorClick(object sender, MouseButtonEventArgs e)
