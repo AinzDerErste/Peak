@@ -1308,6 +1308,21 @@ public partial class IslandWindow : Window
 
     // ─── Collapsed Overlay (Plugin Hook) ─────────────────────────
 
+    /// <summary>
+    /// Plugin-supplied content rendered between the slot 0 (Clock) and slot 1
+    /// (Weather) in the expanded state. Centered overlay — does not resize
+    /// the slot widgets. Pass <c>null</c> to clear.
+    /// </summary>
+    public void SetExpandedHeaderContent(UIElement? content)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => SetExpandedHeaderContent(content));
+            return;
+        }
+        ExpandedHeaderHost.Content = content;
+    }
+
     public void SetCollapsedOverlay(UIElement? overlay)
     {
         if (!Dispatcher.CheckAccess())
@@ -1560,6 +1575,13 @@ public partial class IslandWindow : Window
             PeekContent.Opacity = 0;
             ExpandedContent.Opacity = 0;
 
+            // Plugin-supplied header overlay (e.g. Companion's WebView2 face)
+            // is hosted in a native HWND that ignores WPF Opacity, so the
+            // Opacity=0 above doesn't actually hide it — we'd see the face
+            // peeking out the bottom of the slid-up pill. Force its
+            // Visibility instead so the airspace HWND collapses cleanly.
+            ExpandedHeaderHost.Visibility = Visibility.Collapsed;
+
             // Move window to screen edge (no gap)
             Top = SystemParameters.WorkArea.Top;
 
@@ -1667,6 +1689,15 @@ public partial class IslandWindow : Window
         {
             _scaleTransform.ScaleX = 1.0;
             _scaleTransform.ScaleY = 1.0;
+
+            // Reveal the plugin-supplied header host only AFTER the scale
+            // animation finishes. WebView2 (and other airspace-based controls)
+            // ignore WPF Opacity / ScaleTransform — without this gate their
+            // native HWND paints at full size+position while the rest of the
+            // island is still squashed mid-animation, producing a jarring
+            // "tiny eyes at the top" flash before the layout settles.
+            if (state == IslandState.Expanded)
+                ExpandedHeaderHost.Visibility = Visibility.Visible;
         };
 
         _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
@@ -1684,6 +1715,12 @@ public partial class IslandWindow : Window
         PeekContent.Visibility = state == IslandState.Peek ? Visibility.Visible : Visibility.Collapsed;
         ExpandedContent.Visibility = state == IslandState.Expanded ? Visibility.Visible : Visibility.Collapsed;
         SpotlightContent.Visibility = state == IslandState.Spotlight ? Visibility.Visible : Visibility.Collapsed;
+
+        // Hide the plugin header host during every transition — AnimateState
+        // re-enables it once the scale animation completes (and only when the
+        // target state is Expanded). See the comment in AnimateState for why
+        // airspace-based controls like WebView2 need this special handling.
+        ExpandedHeaderHost.Visibility = Visibility.Collapsed;
 
         // Spotlight uses tighter chrome than the rest of the states — switch the
         // IslandBorder's Padding here so the dark pill hugs the search bar

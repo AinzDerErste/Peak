@@ -116,6 +116,12 @@ public class IslandHost : IIslandHost
         UiDispatcher.Invoke(() => _window.SetCollapsedOverlay(overlay));
     }
 
+    public void SetExpandedHeaderContent(UIElement? content)
+    {
+        if (_window == null) return;
+        UiDispatcher.Invoke(() => _window.SetExpandedHeaderContent(content));
+    }
+
     public void SetViewModelProperty(string propertyName, object? value)
     {
         UiDispatcher.Invoke(() =>

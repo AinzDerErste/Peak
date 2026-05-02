@@ -44,12 +44,24 @@ public class PluginLoader : IDisposable
                 var dlls = Directory.GetFiles(pluginDir, "*.dll");
                 foreach (var dll in dlls)
                 {
-                    var loaded = LoadAssembly(dll, services, savedSettings, disabledPlugins);
-                    plugins.AddRange(loaded);
+                    try
+                    {
+                        var loaded = LoadAssembly(dll, services, savedSettings, disabledPlugins);
+                        plugins.AddRange(loaded);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Mirror the failure to a per-plugin log file so it survives
+                        // even when the host's logger isn't configured for file
+                        // output. Critical for debugging plugins that won't load.
+                        WritePluginErrorLog(pluginDir, dll, ex);
+                        _logger?.LogWarning(ex, "Failed to load plugin DLL {Dll}", dll);
+                    }
                 }
             }
             catch (Exception ex)
             {
+                WritePluginErrorLog(pluginDir, null, ex);
                 _logger?.LogWarning(ex, "Failed to load plugin from {PluginDir}", pluginDir);
             }
         }
@@ -166,6 +178,11 @@ public class PluginLoader : IDisposable
             }
             catch (Exception ex)
             {
+                // Mirror to per-plugin file log too — _logger has no file sink in
+                // production builds, so without this an instantiation/Init crash
+                // disappears silently and the plugin just "doesn't show up".
+                WritePluginErrorLog(Path.GetDirectoryName(dllPath) ?? _pluginsDir, dllPath,
+                    new Exception($"Failed to instantiate plugin type {type.FullName}", ex));
                 _logger?.LogWarning(ex, "Failed to instantiate plugin {TypeName}", type.FullName);
             }
         }
@@ -302,6 +319,47 @@ public class PluginLoader : IDisposable
             }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Append a load-failure stack-trace to <c>plugin-load-error.log</c> in
+    /// the plugin's own folder. Used as a fallback diagnostic when the host's
+    /// ILogger isn't writing to a file the user can read. Includes
+    /// LoaderExceptions for ReflectionTypeLoadException so missing-reference
+    /// problems surface clearly.
+    /// </summary>
+    private static void WritePluginErrorLog(string pluginDir, string? dll, Exception ex)
+    {
+        try
+        {
+            Directory.CreateDirectory(pluginDir);
+            var path = Path.Combine(pluginDir, "plugin-load-error.log");
+            var sb = new System.Text.StringBuilder();
+            sb.Append('[').Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")).Append(']');
+            if (dll != null) sb.Append(' ').Append(Path.GetFileName(dll));
+            sb.AppendLine();
+            // Walk the InnerException chain so wrapped activator/Init failures are
+            // visible (otherwise we'd just see "Exception of type 'X' was thrown").
+            var cur = ex;
+            int depth = 0;
+            while (cur != null)
+            {
+                sb.Append(new string(' ', depth * 2))
+                  .Append(cur.GetType().Name).Append(": ").AppendLine(cur.Message);
+                if (cur is ReflectionTypeLoadException rtle && rtle.LoaderExceptions != null)
+                {
+                    foreach (var lex in rtle.LoaderExceptions)
+                        if (lex != null) sb.Append(new string(' ', depth * 2))
+                                           .Append("  Loader: ").AppendLine(lex.Message);
+                }
+                if (cur.StackTrace != null) sb.AppendLine(cur.StackTrace);
+                cur = cur.InnerException;
+                depth++;
+            }
+            sb.AppendLine();
+            File.AppendAllText(path, sb.ToString());
+        }
+        catch { /* disk full / locked — last-resort logging, swallow */ }
     }
 
     public void Dispose()

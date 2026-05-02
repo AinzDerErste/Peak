@@ -62,6 +62,17 @@ public interface IIslandHost
     /// Pass null to remove the overlay and restore normal collapsed content.
     /// </summary>
     void SetCollapsedOverlay(UIElement? overlay);
+
+    /// <summary>
+    /// Place a plugin-supplied element in the center of the expanded-state
+    /// header (between the clock on the left and the weather on the right).
+    /// Pass null to clear it and restore the normal header layout.
+    ///
+    /// Intended for small accessory widgets — companion eyes, status pills,
+    /// activity indicators. The host gives the element a fixed-size cell;
+    /// elements that need to scale should use Stretch / Viewbox internally.
+    /// </summary>
+    void SetExpandedHeaderContent(UIElement? content);
 }
 
 /// <summary>

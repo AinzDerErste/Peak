@@ -70,23 +70,12 @@ public class NotificationService : IDisposable
                     if (binding == null) continue;
 
                     var texts = binding.GetTextElements().ToList();
-                    byte[]? iconBytes = null;
-                    try
-                    {
-                        var logo = notif.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(32, 32));
-                        if (logo != null)
-                        {
-                            using var stream = await logo.OpenReadAsync();
-                            using var ms = new System.IO.MemoryStream();
-                            var buf = new byte[4096];
-                            var inputStream = stream.AsStreamForRead();
-                            int read;
-                            while ((read = await inputStream.ReadAsync(buf, 0, buf.Length, ct)) > 0)
-                                ms.Write(buf, 0, read);
-                            iconBytes = ms.ToArray();
-                        }
-                    }
-                    catch { /* icon extraction failed, continue without */ }
+                    // Try a few common logo sizes — different apps register their
+                    // tile/logo at different scale targets, so requesting only
+                    // 32×32 misses a lot. We take the first that yields a non-empty
+                    // stream. The host falls back to a Shell-namespace lookup or a
+                    // letter avatar if everything here returns null.
+                    byte[]? iconBytes = await TryExtractLogoAsync(notif, ct);
 
                     var data = new Models.NotificationData
                     {
@@ -104,6 +93,39 @@ public class NotificationService : IDisposable
             }
             catch { /* Ignore transient errors */ }
         }
+    }
+
+    /// <summary>
+    /// Walks a list of common tile/logo sizes asking the toast's <c>AppInfo.DisplayInfo</c>
+    /// for an image, returning the first non-empty stream as bytes. Different
+    /// apps register their logos at different scales (32, 48, 64, 256, …) so a
+    /// single hard-coded size misses a lot of notifications.
+    /// </summary>
+    private static async Task<byte[]?> TryExtractLogoAsync(UserNotification notif, CancellationToken ct)
+    {
+        if (notif.AppInfo?.DisplayInfo is not { } display) return null;
+
+        var sizes = new[] { 32, 48, 64, 96, 256 };
+        foreach (var size in sizes)
+        {
+            try
+            {
+                var logo = display.GetLogo(new Windows.Foundation.Size(size, size));
+                if (logo == null) continue;
+
+                using var stream = await logo.OpenReadAsync();
+                using var ms = new System.IO.MemoryStream();
+                var buf = new byte[4096];
+                var inputStream = stream.AsStreamForRead();
+                int read;
+                while ((read = await inputStream.ReadAsync(buf, 0, buf.Length, ct)) > 0)
+                    ms.Write(buf, 0, read);
+
+                if (ms.Length > 0) return ms.ToArray();
+            }
+            catch { /* this size unavailable — try the next */ }
+        }
+        return null;
     }
 
     public void Dispose()

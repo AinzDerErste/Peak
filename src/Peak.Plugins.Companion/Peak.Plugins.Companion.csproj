@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Peak.Plugins.Companion</AssemblyName>
+    <RootNamespace>Peak.Plugins.Companion</RootNamespace>
+    <PluginOutputDir>$(AppData)\Peak\plugins\companion\</PluginOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SDK is loaded by the host — never ship a second copy. -->
+    <ProjectReference Include="..\Peak.Plugin.Sdk\Peak.Plugin.Sdk.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <!-- Logging abstractions also come from the host. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <!-- WebView2 IS shipped by this plugin — the host doesn't reference it,
+         so the runtime DLLs need to land in the plugin's deploy folder. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+  </ItemGroup>
+
+  <!-- The eyes-widget HTML is embedded as a resource so the plugin is a
+       single-DLL drop-in. Editable copy still lives next to the source for
+       devs who want to iterate on the HTML. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\companion.html" />
+  </ItemGroup>
+
+  <!-- Auto-deploy after build: copy the plugin DLL, every managed dependency,
+       the native WebView2 loaders, AND .deps.json. The deps.json is critical —
+       PluginLoadContext.AssemblyDependencyResolver consults it to find the
+       native WebView2Loader.dll under runtimes/<rid>/native/. Without it, the
+       plugin assembly fails to load (TypeRefs to WebView2 types can't resolve)
+       and the host swallows the load failure silently. -->
+  <Target Name="CopyToPluginsDir" AfterTargets="Build">
+    <ItemGroup>
+      <_PluginFiles Include="$(OutDir)*.dll" />
+      <_PluginFiles Include="$(OutDir)*.html" />
+      <_PluginFiles Include="$(OutDir)*.deps.json" />
+      <_PluginNativeFiles Include="$(OutDir)runtimes\**\*.*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PluginOutputDir)" />
+    <Copy SourceFiles="@(_PluginFiles)" DestinationFolder="$(PluginOutputDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PluginNativeFiles)"
+          DestinationFiles="@(_PluginNativeFiles->'$(PluginOutputDir)runtimes\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

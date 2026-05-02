@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Companion Eyes</title>
+<!--
+  ============================================================================
+  COMPANION EYES — Standalone single-file widget (solid oval style)
+  ============================================================================
+  - Solid white oval eyes on dark screen, with LED-style glow.
+  - Expressions are pure CSS transforms on two identical rounded rects, plus
+    a heart path swap for the 'love' mood.
+  - No external dependencies. Drop into any browser, WebView2, CefSharp, or
+    QWebEngineView host.
+  - Public API (after DOMContentLoaded):
+       window.companion.setMood(name)        // 'idle' | 'happy' | ...
+       window.companion.getMood()
+       window.companion.getMoods()
+       window.companion.blink()
+       window.companion.lookAt(x, y)
+       window.companion.lookCenter()
+       window.companion.setMouseTracking(b)
+       window.companion.on(event, callback)  // 'moodchange', 'blink'
+  - Configuration: edit window.COMPANION_CONFIG below or set it BEFORE this
+    script runs (e.g. via WebView2 AddScriptToExecuteOnDocumentCreatedAsync).
+  ============================================================================
+-->
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .companion-screen {
+    width: 100%; height: 100%;
+    aspect-ratio: 2 / 1;
+    background: var(--companion-screen-bg, #000);
+    border-radius: var(--companion-radius, 0);
+    overflow: hidden;
+    position: relative;
+  }
+  .companion-svg {
+    width: 100%; height: 100%;
+    display: block;
+  }
+
+  /* Idle breathing — applied to whole eye group; inner mood transforms
+     don't conflict because they live on different elements. */
+  .eyes-container {
+    animation: companion-breathe var(--companion-breathe-duration, 4.5s)
+               ease-in-out infinite;
+    transform-origin: 200px 100px;
+    transform-box: view-box;
+  }
+  @keyframes companion-breathe {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-3px); }
+  }
+
+  /* Glow filter — two stacked drop-shadows for realistic LED bloom. */
+  .eye {
+    filter: drop-shadow(0 0 var(--companion-glow-inner-blur, 2px)
+                        var(--companion-glow-inner-color, rgba(255,255,255,0.95)))
+            drop-shadow(0 0 var(--companion-glow-outer-blur, 8px)
+                        var(--companion-glow-outer-color, rgba(255,255,255,0.45)));
+  }
+
+  /* The base shape that gets transformed into all moods.
+     transform-box: fill-box pivots transforms around the element's own
+     center, not the SVG viewport origin. */
+  .eye-shape {
+    transition: transform var(--companion-mood-duration, 0.5s)
+                cubic-bezier(0.34, 1.56, 0.64, 1),
+                opacity 0.35s ease;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .heart { opacity: 0; }
+
+  /* ===== MOOD STATES =====
+     Pure CSS transforms on the .base-rect. No path morphing required. */
+
+  [data-mood="happy"] .base-rect {
+    transform: scaleY(0.22);
+  }
+
+  [data-mood="sad"] .eye-left .base-rect {
+    transform: rotate(18deg) translateY(6px);
+  }
+  [data-mood="sad"] .eye-right .base-rect {
+    transform: rotate(-18deg) translateY(6px);
+  }
+
+  [data-mood="angry"] .eye-left .base-rect {
+    transform: rotate(-24deg) scaleY(0.85);
+  }
+  [data-mood="angry"] .eye-right .base-rect {
+    transform: rotate(24deg) scaleY(0.85);
+  }
+
+  [data-mood="surprised"] .base-rect {
+    transform: scale(1.22);
+  }
+
+  [data-mood="suspicious"] .base-rect {
+    transform: scaleY(0.25);
+  }
+
+  [data-mood="sleepy"] .base-rect {
+    transform: scaleY(0.06);
+  }
+
+  [data-mood="love"] .base-rect {
+    opacity: 0;
+  }
+  [data-mood="love"] .heart {
+    opacity: 1;
+    animation: companion-heartbeat 1.1s ease-in-out infinite;
+  }
+  @keyframes companion-heartbeat {
+    0%, 60%, 100% { transform: scale(1); }
+    20%           { transform: scale(1.18); }
+    40%           { transform: scale(0.95); }
+  }
+
+  [data-mood="wink"] .eye-left .base-rect {
+    transform: scaleY(0.06);
+  }
+
+  /* Blink overrides everything for a snappy 110ms close. */
+  .companion-screen.blinking .base-rect {
+    transform: scaleY(0.06) !important;
+    transition: transform 0.1s ease-out !important;
+  }
+</style>
+</head>
+<body>
+
+<div class="companion-screen" id="companion-screen" data-mood="idle">
+  <svg class="companion-svg" id="companion-svg"
+       viewBox="0 0 400 200"
+       xmlns="http://www.w3.org/2000/svg"
+       preserveAspectRatio="xMidYMid meet">
+    <g class="eyes-container" id="companion-eyes">
+      <!-- Each eye is a translate group containing its rect + heart paths.
+           Mouse-tracking sets transform on the <g>; mood transforms hit the
+           inner .eye-shape elements via CSS. The two stacks compose cleanly. -->
+      <g class="eye eye-left" id="companion-eye-left" transform="translate(140 100)">
+        <rect class="eye-shape base-rect"
+              x="-28" y="-42" width="56" height="84" rx="22"
+              fill="var(--companion-eye-color, #F5F7FA)" />
+        <path class="eye-shape heart"
+              d="M 0 32 C -28 14 -34 -12 -22 -24 C -12 -32 -4 -24 0 -14
+                 C 4 -24 12 -32 22 -24 C 34 -12 28 14 0 32 Z"
+              fill="var(--companion-heart-color, #F0997B)" />
+      </g>
+      <g class="eye eye-right" id="companion-eye-right" transform="translate(260 100)">
+        <rect class="eye-shape base-rect"
+              x="-28" y="-42" width="56" height="84" rx="22"
+              fill="var(--companion-eye-color, #F5F7FA)" />
+        <path class="eye-shape heart"
+              d="M 0 32 C -28 14 -34 -12 -22 -24 C -12 -32 -4 -24 0 -14
+                 C 4 -24 12 -32 22 -24 C 34 -12 28 14 0 32 Z"
+              fill="var(--companion-heart-color, #F0997B)" />
+      </g>
+    </g>
+  </svg>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ===========================================================================
+  // CONFIG — override by setting window.COMPANION_CONFIG before this script
+  //         runs, or edit the defaults here directly.
+  // ===========================================================================
+  const DEFAULTS = {
+    transparent: false,         // true => transparent body+html (for WebView2)
+    screenBackground: '#000',
+    screenRadius: '0',
+    eyeColor: '#F5F7FA',        // off-white avoids harsh flicker on pure black
+    heartColor: '#F0997B',
+    glow: {
+      innerBlur: '2px',
+      innerColor: 'rgba(255,255,255,0.95)',
+      outerBlur: '8px',
+      outerColor: 'rgba(255,255,255,0.45)',
+    },
+    breathing: true,
+    breathDuration: '4.5s',
+    moodTransitionDuration: '0.5s',
+    blinking: {
+      enabled: true,
+      minIntervalMs: 2500,
+      maxIntervalMs: 6700,
+      doubleBlinkChance: 0.15,
+      // Moods where blinking would look wrong (eyes already closed/special).
+      skipMoods: ['sleepy', 'love', 'wink', 'happy', 'suspicious'],
+    },
+    mouseTracking: true,
+    gaze: {
+      maxOffsetX: 14,
+      maxOffsetY: 10,
+      smoothing: 0.10,
+      reachDistance: 250,
+    },
+    initialMood: 'idle',
+  };
+
+  const userConfig = window.COMPANION_CONFIG || {};
+  const CONFIG = deepMerge(DEFAULTS, userConfig);
+
+  function deepMerge(target, source) {
+    const out = Array.isArray(target) ? target.slice() : Object.assign({}, target);
+    for (const key in source) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        out[key] = deepMerge(target[key] || {}, source[key]);
+      } else {
+        out[key] = source[key];
+      }
+    }
+    return out;
+  }
+
+  const VALID_MOODS = [
+    'idle', 'happy', 'sad', 'angry', 'surprised',
+    'suspicious', 'sleepy', 'love', 'wink',
+  ];
+
+  // ===========================================================================
+  // DOM REFS
+  // ===========================================================================
+  const screen   = document.getElementById('companion-screen');
+  const svg      = document.getElementById('companion-svg');
+  const eyesC    = document.getElementById('companion-eyes');
+  const eyeLeft  = document.getElementById('companion-eye-left');
+  const eyeRight = document.getElementById('companion-eye-right');
+
+  // ===========================================================================
+  // APPLY CONFIG TO CSS VARIABLES
+  // ===========================================================================
+  function applyConfigStyles() {
+    const root = document.documentElement;
+    if (CONFIG.transparent) {
+      root.style.background = 'transparent';
+      document.body.style.background = 'transparent';
+      screen.style.setProperty('--companion-screen-bg', 'transparent');
+    } else {
+      screen.style.setProperty('--companion-screen-bg', CONFIG.screenBackground);
+    }
+    screen.style.setProperty('--companion-radius', CONFIG.screenRadius);
+    screen.style.setProperty('--companion-eye-color', CONFIG.eyeColor);
+    screen.style.setProperty('--companion-heart-color', CONFIG.heartColor);
+    screen.style.setProperty('--companion-glow-inner-blur',  CONFIG.glow.innerBlur);
+    screen.style.setProperty('--companion-glow-inner-color', CONFIG.glow.innerColor);
+    screen.style.setProperty('--companion-glow-outer-blur',  CONFIG.glow.outerBlur);
+    screen.style.setProperty('--companion-glow-outer-color', CONFIG.glow.outerColor);
+    screen.style.setProperty('--companion-breathe-duration', CONFIG.breathDuration);
+    screen.style.setProperty('--companion-mood-duration', CONFIG.moodTransitionDuration);
+    if (!CONFIG.breathing) eyesC.style.animation = 'none';
+  }
+  applyConfigStyles();
+
+  // ===========================================================================
+  // EVENT BUS
+  // ===========================================================================
+  const listeners = { moodchange: [], blink: [] };
+  function emit(event, data) {
+    (listeners[event] || []).forEach(fn => {
+      try { fn(data); } catch (e) { console.error(e); }
+    });
+  }
+
+  // ===========================================================================
+  // MOOD APPLICATION — JS just writes the attribute; CSS does the rest.
+  // ===========================================================================
+  let currentMood = null;
+
+  function applyMood(name) {
+    if (!VALID_MOODS.includes(name)) {
+      console.warn('[companion] Unknown mood: ' + name);
+      return false;
+    }
+    const previous = currentMood;
+    screen.setAttribute('data-mood', name);
+    currentMood = name;
+    if (previous !== name) emit('moodchange', { from: previous, to: name });
+    return true;
+  }
+
+  // ===========================================================================
+  // GAZE TRACKING — eye <g> elements get translated, mood transforms live on
+  //                inner shapes. Both stack cleanly without conflict.
+  // ===========================================================================
+  let mouseTracking = CONFIG.mouseTracking;
+  let targetX = 0, targetY = 0;
+  let currentX = 0, currentY = 0;
+  const BASE_LX = 140, BASE_RX = 260, BASE_Y = 100;
+
+  function onMouseMove(e) {
+    if (!mouseTracking) return;
+    aimAt(e.clientX, e.clientY);
+  }
+  window.addEventListener('mousemove', onMouseMove);
+
+  function aimAt(clientX, clientY) {
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top  + rect.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const dist = Math.min(Math.hypot(dx, dy) / CONFIG.gaze.reachDistance, 1);
+    const ang = Math.atan2(dy, dx);
+    targetX = Math.cos(ang) * dist * CONFIG.gaze.maxOffsetX;
+    targetY = Math.sin(ang) * dist * CONFIG.gaze.maxOffsetY;
+  }
+
+  function gazeLoop() {
+    currentX += (targetX - currentX) * CONFIG.gaze.smoothing;
+    currentY += (targetY - currentY) * CONFIG.gaze.smoothing;
+    eyeLeft.setAttribute('transform',
+      'translate(' + (BASE_LX + currentX).toFixed(2) + ' ' +
+                     (BASE_Y  + currentY).toFixed(2) + ')');
+    eyeRight.setAttribute('transform',
+      'translate(' + (BASE_RX + currentX).toFixed(2) + ' ' +
+                     (BASE_Y  + currentY).toFixed(2) + ')');
+    requestAnimationFrame(gazeLoop);
+  }
+  gazeLoop();
+
+  // ===========================================================================
+  // BLINKING
+  // ===========================================================================
+  function performBlink() {
+    screen.classList.add('blinking');
+    emit('blink', null);
+    setTimeout(() => screen.classList.remove('blinking'), 110);
+  }
+
+  function scheduleBlink() {
+    if (!CONFIG.blinking.enabled) return;
+    const range = CONFIG.blinking.maxIntervalMs - CONFIG.blinking.minIntervalMs;
+    const delay = CONFIG.blinking.minIntervalMs + Math.random() * range;
+    setTimeout(() => {
+      if (!CONFIG.blinking.skipMoods.includes(currentMood)) {
+        performBlink();
+        if (Math.random() < CONFIG.blinking.doubleBlinkChance) {
+          setTimeout(performBlink, 280);
+        }
+      }
+      scheduleBlink();
+    }, delay);
+  }
+  scheduleBlink();
+
+  // ===========================================================================
+  // PUBLIC API
+  // ===========================================================================
+  window.companion = {
+    setMood(name)             { return applyMood(name); },
+    getMood()                 { return currentMood; },
+    getMoods()                { return VALID_MOODS.slice(); },
+    blink()                   { performBlink(); },
+    lookAt(x, y)              { aimAt(x, y); },
+    lookCenter()              { targetX = 0; targetY = 0; },
+    setMouseTracking(enabled) {
+      mouseTracking = !!enabled;
+      if (!enabled) { targetX = 0; targetY = 0; }
+    },
+    on(event, callback) {
+      if (!listeners[event]) listeners[event] = [];
+      listeners[event].push(callback);
+    },
+    off(event, callback) {
+      if (!listeners[event]) return;
+      listeners[event] = listeners[event].filter(fn => fn !== callback);
+    },
+  };
+
+  // ===========================================================================
+  // INITIAL STATE + READY SIGNAL
+  // ===========================================================================
+  applyMood(CONFIG.initialMood);
+
+  if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+    try {
+      window.chrome.webview.postMessage({ type: 'companion-ready' });
+    } catch (_) {}
+  }
+  document.dispatchEvent(new CustomEvent('companion-ready'));
+})();
+</script>
+</body>
+</html>

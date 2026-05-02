@@ -706,6 +706,110 @@ public partial class IslandViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// Three-layer icon resolution for an incoming Windows notification:
+    ///
+    ///   1. The bytes the toast itself ships (<see cref="NotificationData.IconBytes"/>) —
+    ///      from <c>UserNotification.AppInfo.DisplayInfo.GetLogo</c>. Most reliable for
+    ///      packaged apps (Discord, Spotify, Teams).
+    ///   2. <see cref="Helpers.IconExtractor"/> via the AppUserModelId. The same
+    ///      <c>IShellItemImageFactory</c> path Peak uses for Spotlight icons —
+    ///      catches Win32 apps and UWP apps the toast's DisplayInfo missed.
+    ///   3. A coloured letter avatar generated from the AppName. Always succeeds;
+    ///      ensures the notification slot is never empty.
+    /// </summary>
+    private static ImageSource? ResolveNotificationIcon(NotificationData data)
+    {
+        // Layer 1: bytes embedded in the toast.
+        if (data.IconBytes is { Length: > 0 })
+        {
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.StreamSource = new MemoryStream(data.IconBytes);
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            }
+            catch { /* malformed bytes — fall through to next layer */ }
+        }
+
+        // Layer 2: shell:appsFolder lookup keyed by the AppUserModelId. Same
+        // mechanism as the Spotlight result icons — pulls whatever Explorer
+        // would show for that app from the Shell namespace.
+        if (!string.IsNullOrWhiteSpace(data.AppUserModelId))
+        {
+            var shellIcon = Helpers.IconExtractor.GetIcon($"shell:appsFolder\\{data.AppUserModelId}", 32);
+            if (shellIcon != null) return shellIcon;
+        }
+
+        // Layer 3: synthesise a letter avatar so the icon column is never blank.
+        return BuildLetterAvatar(data.AppName);
+    }
+
+    /// <summary>
+    /// Renders a 32 × 32 circle with a single uppercase letter in the centre,
+    /// colour derived from a stable hash of <paramref name="appName"/> so the
+    /// same app always lands on the same colour.
+    /// </summary>
+    private static ImageSource BuildLetterAvatar(string appName)
+    {
+        const int size = 32;
+        var letter = string.IsNullOrWhiteSpace(appName) ? "?" : char.ToUpperInvariant(appName.Trim()[0]).ToString();
+        var bg = HashToColor(appName);
+
+        var visual = new DrawingVisual();
+        using (var ctx = visual.RenderOpen())
+        {
+            ctx.DrawEllipse(new SolidColorBrush(bg), null, new Point(size / 2.0, size / 2.0), size / 2.0, size / 2.0);
+
+            var fmt = new FormattedText(
+                letter,
+                System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+                size * 0.55,
+                Brushes.White,
+                pixelsPerDip: 1.0);
+            var origin = new Point((size - fmt.Width) / 2.0, (size - fmt.Height) / 2.0);
+            ctx.DrawText(fmt, origin);
+        }
+
+        var rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(visual);
+        rtb.Freeze();
+        return rtb;
+    }
+
+    /// <summary>
+    /// Deterministic but pleasant colour from a string. Uses a simple hash to
+    /// pick a hue from a curated set — same input always maps to the same
+    /// output, so an app keeps its colour across sessions.
+    /// </summary>
+    private static Color HashToColor(string text)
+    {
+        // Hand-picked palette of saturated-but-readable colours. Letters render
+        // white on top so we keep the lightness moderate.
+        var palette = new[]
+        {
+            Color.FromRgb(0x60, 0xA5, 0xFA), // blue
+            Color.FromRgb(0xF8, 0x71, 0x71), // red
+            Color.FromRgb(0x34, 0xD3, 0x99), // green
+            Color.FromRgb(0xFB, 0xBF, 0x24), // amber
+            Color.FromRgb(0xA7, 0x8B, 0xFA), // violet
+            Color.FromRgb(0xF4, 0x72, 0xB6), // pink
+            Color.FromRgb(0x2D, 0xD4, 0xBF), // teal
+            Color.FromRgb(0xFB, 0x92, 0x3C), // orange
+        };
+
+        int hash = 0;
+        foreach (var c in text ?? "")
+            hash = (hash * 31 + c) & 0x7FFFFFFF;
+        return palette[hash % palette.Length];
+    }
+
     private void ShowNotificationData(NotificationData data)
     {
         NotificationTitle = data.Title;
@@ -713,20 +817,7 @@ public partial class IslandViewModel : ObservableObject
         NotificationApp = data.AppName;
         CurrentNotificationAumid = data.AppUserModelId;
 
-        if (data.IconBytes is { Length: > 0 })
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.StreamSource = new MemoryStream(data.IconBytes);
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.EndInit();
-            bmp.Freeze();
-            NotificationIcon = bmp;
-        }
-        else
-        {
-            NotificationIcon = null;
-        }
+        NotificationIcon = ResolveNotificationIcon(data);
 
         HasNotification = true;
 

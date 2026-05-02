@@ -56,6 +56,9 @@ jobs:
       - name: Build TeamSpeak Plugin
         run: dotnet build src/Peak.Plugins.TeamSpeak/Peak.Plugins.TeamSpeak.csproj -c Release
 
+      - name: Build Companion Plugin
+        run: dotnet build src/Peak.Plugins.Companion/Peak.Plugins.Companion.csproj -c Release
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress

@@ -179,9 +179,18 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Album art (media, hidden when notification active) -->
+                    <!-- Album art (media, hidden when notification active).
+                         38×38 thumbnail in the 56px peek pill: top/bottom gap
+                         to the pill's outer edge is ~9px (8px padding +
+                         0.5px border + 0.5px vertical centring). Left margin
+                         of -7 trims the IslandBorder's 16px horizontal
+                         padding to a matching ~9px on the left, so the icon
+                         is visually equidistant from three pill edges.
+                         VerticalAlignment=Center keeps it pinned to the
+                         cell's midline if the neighbouring text grows. -->
                     <Border Grid.Column="0" Width="38" Height="38" CornerRadius="10"
-                            Margin="0,0,12,0" Visibility="{Binding PeekShowsMedia, Converter={StaticResource BoolToVisibility}}">
+                            VerticalAlignment="Center"
+                            Margin="-7,0,12,0" Visibility="{Binding PeekShowsMedia, Converter={StaticResource BoolToVisibility}}">
                         <Border.Background>
                             <ImageBrush ImageSource="{Binding AlbumArt}" Stretch="UniformToFill" />
                         </Border.Background>
@@ -237,6 +246,14 @@
                             </Grid.ColumnDefinitions>
                             <ContentControl x:Name="SlotHost0" Grid.Column="0" Margin="0,4,6,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                             <ContentControl x:Name="SlotHost1" Grid.Column="1" Margin="6,4,0,4" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                            <!-- Header-content overlay — populated by plugins via
+                                 IIslandHost.SetExpandedHeaderContent. Spans both columns
+                                 and centers itself between them, so a small companion
+                                 widget sits visually between Clock (slot 0) and Weather
+                                 (slot 1) without resizing either slot. -->
+                            <ContentControl x:Name="ExpandedHeaderHost" Grid.Column="0" Grid.ColumnSpan="2"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            IsHitTestVisible="True" />
                             <Border x:Name="EditOverlay0" Grid.Column="0" Background="#F0050505" CornerRadius="8" Margin="0,0,6,0"
                                     Visibility="Collapsed" Cursor="Hand" MouseDown="OnEditSlotClick" Tag="0"
                                     AllowDrop="True" DragOver="OnEditOverlayDragOver" Drop="OnEditOverlayDrop"
