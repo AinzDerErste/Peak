@@ -10,6 +10,7 @@
 #define PublishDir "..\src\Peak.App\bin\Release\net8.0-windows10.0.22621.0\publish"
 #define DiscordPluginDir "..\src\Peak.Plugins.Discord\bin\Release\net8.0-windows10.0.22621.0"
 #define TeamSpeakPluginDir "..\src\Peak.Plugins.TeamSpeak\bin\Release\net8.0-windows10.0.22621.0"
+#define CompanionPluginDir "..\src\Peak.Plugins.Companion\bin\Release\net8.0-windows10.0.22621.0"
 #define IconFile "..\src\Peak.App\Assets\app-icon.ico"
 
 [Setup]
@@ -41,6 +42,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "Start Peak with Windows"; GroupDescription: "Additional options:"
 Name: "discord"; Description: "Install Discord plugin (voice call integration)"; GroupDescription: "Plugins:"
 Name: "teamspeak"; Description: "Install TeamSpeak 6 plugin (voice channel display)"; GroupDescription: "Plugins:"
+Name: "companion"; Description: "Install Companion plugin (animated eyes in expanded header)"; GroupDescription: "Plugins:"
 
 [Files]
 ; Main application
@@ -49,6 +51,12 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Source: "{#DiscordPluginDir}\Peak.Plugins.Discord.dll"; DestDir: "{userappdata}\Peak\plugins\discord"; Flags: ignoreversion; Tasks: discord
 ; TeamSpeak plugin → %APPDATA%\Peak\plugins\teamspeak\
 Source: "{#TeamSpeakPluginDir}\Peak.Plugins.TeamSpeak.dll"; DestDir: "{userappdata}\Peak\plugins\teamspeak"; Flags: ignoreversion; Tasks: teamspeak
+; Companion plugin → %APPDATA%\Peak\plugins\companion\
+;   Single-DLL bundle isn't enough here — Companion has WebView2 native deps
+;   plus .deps.json (without which AssemblyDependencyResolver can't find the
+;   runtimes/<rid>/native/WebView2Loader.dll, and the plugin silently fails
+;   to load). Whole folder ships, minus debug symbols and XML doc files.
+Source: "{#CompanionPluginDir}\*"; DestDir: "{userappdata}\Peak\plugins\companion"; Excludes: "*.pdb,*.xml"; Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: companion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -71,6 +79,7 @@ Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; Ru
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{userappdata}\Peak\plugins\discord"
 Type: filesandordirs; Name: "{userappdata}\Peak\plugins\teamspeak"
+Type: filesandordirs; Name: "{userappdata}\Peak\plugins\companion"
 
 [Code]
 function IsDotNet8Installed(): Boolean;
