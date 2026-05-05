@@ -690,16 +690,21 @@ public partial class IslandViewModel : ObservableObject
 
     private void OnMediaPositionChanged(TimeSpan position, TimeSpan duration)
     {
-        var posSec = (int)position.TotalSeconds;
-        var durSec = (int)duration.TotalSeconds;
-        if (posSec == _lastPositionSec && durSec == _lastDurationSec) return;
-        _lastPositionSec = posSec;
-        _lastDurationSec = durSec;
-
-        // BeginInvoke (was Invoke) so the background MediaService thread
-        // doesn't block waiting for the dispatcher when the UI is busy.
+        // Dedup is performed on the UI thread (was on the background caller)
+        // so it's deterministically ordered with respect to OnMediaChanged's
+        // reset of _lastPositionSec/_lastDurationSec on track change.
+        // Otherwise a position update could land between OnMediaChanged
+        // queuing the reset and the reset actually running, causing the
+        // first position emit for the new track to be dedup'd against the
+        // previous track's cached buckets — symptom: time text frozen.
         _dispatcher.BeginInvoke((Action)(() =>
         {
+            var posSec = (int)position.TotalSeconds;
+            var durSec = (int)duration.TotalSeconds;
+            if (posSec == _lastPositionSec && durSec == _lastDurationSec) return;
+            _lastPositionSec = posSec;
+            _lastDurationSec = durSec;
+
             if (durSec > 0)
             {
                 HasMediaProgress = true;

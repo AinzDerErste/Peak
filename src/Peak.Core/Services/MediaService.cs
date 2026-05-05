@@ -102,6 +102,7 @@ public class MediaService : IDisposable
             {
                 _currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
                 _currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+                _currentSession.TimelinePropertiesChanged -= OnTimelinePropertiesChanged;
             }
 
             _positionCts?.Cancel();
@@ -114,6 +115,15 @@ public class MediaService : IDisposable
             {
                 session.MediaPropertiesChanged += OnMediaPropertiesChanged;
                 session.PlaybackInfoChanged += OnPlaybackInfoChanged;
+                // Critical for accurate position-text: SMTC has a dedicated
+                // event for timeline updates that fires when the source app
+                // updates its TimelineProperties (track change, seek, …).
+                // Without this we relied solely on the 1Hz poll + extrapola-
+                // tion, which can show the previous track's position for up
+                // to a full second after a skip — and longer for apps like
+                // Spotify that update TimelineProperties slightly after
+                // MediaProperties on a track change.
+                session.TimelinePropertiesChanged += OnTimelinePropertiesChanged;
             }
         }
 
@@ -214,6 +224,53 @@ public class MediaService : IDisposable
     }
 
     /// <summary>
+    /// Fires when the source app updates its <c>TimelineProperties</c>
+    /// (new track, seek, scrub-end). Push a fresh position immediately so
+    /// the UI doesn't have to wait up to a second for the next poll tick.
+    /// </summary>
+    private void OnTimelinePropertiesChanged(
+        GlobalSystemMediaTransportControlsSession sender, TimelinePropertiesChangedEventArgs args)
+    {
+        int gen;
+        lock (_sessionLock)
+        {
+            if (!ReferenceEquals(sender, _currentSession)) return;
+            gen = _generation;
+        }
+        EmitPositionSnapshot(sender, gen);
+    }
+
+    /// <summary>
+    /// Read the current timeline once and emit a single
+    /// <see cref="PositionChanged"/> event. Same extrapolation logic as the
+    /// 1 Hz poller — used here for event-driven push so position updates
+    /// don't lag the next poll tick after a track change or seek.
+    /// </summary>
+    private void EmitPositionSnapshot(GlobalSystemMediaTransportControlsSession session, int gen)
+    {
+        if (!IsCurrent(session, gen)) return;
+        try
+        {
+            var tl = session.GetTimelineProperties();
+            var playback = session.GetPlaybackInfo();
+            var pos = tl.Position;
+
+            if (playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing
+                && tl.LastUpdatedTime != default)
+            {
+                var elapsed = DateTimeOffset.Now - tl.LastUpdatedTime;
+                pos += elapsed;
+                if (tl.EndTime > TimeSpan.Zero && pos > tl.EndTime)
+                    pos = tl.EndTime;
+            }
+
+            if (IsCurrent(session, gen))
+                PositionChanged?.Invoke(pos, tl.EndTime);
+        }
+        catch { /* session torn down between checks */ }
+    }
+
+    /// <summary>
     /// Snapshot the session's metadata + thumbnail, but only commit the
     /// result if no newer refresh / session swap landed during the awaits.
     /// Multiple concurrent calls are safe; the loser silently drops its
@@ -280,6 +337,12 @@ public class MediaService : IDisposable
 
             CurrentMedia = info;
             MediaChanged?.Invoke(info);
+
+            // Push a position update right after the metadata so the progress
+            // bar / time text refresh immediately on track change, instead of
+            // waiting up to a full second for the polling tick. This is what
+            // closes the "title updated, time still on old track" window.
+            EmitPositionSnapshot(session, gen);
         }
         catch { /* Session may have been disposed mid-call */ }
     }
@@ -346,6 +409,7 @@ public class MediaService : IDisposable
             {
                 _currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
                 _currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+                _currentSession.TimelinePropertiesChanged -= OnTimelinePropertiesChanged;
             }
             _positionCts?.Cancel();
             _currentSession = null;
