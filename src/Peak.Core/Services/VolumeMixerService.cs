@@ -4,6 +4,20 @@ using Peak.Core.Models;
 
 namespace Peak.Core.Services;
 
+/// <summary>
+/// Polls the system audio session manager for per-app volumes.
+///
+/// <para>Why <see cref="RefreshAsync"/> exists alongside <see cref="Refresh"/>:</para>
+/// <para>
+/// Enumerating sessions also reads <c>Process.MainModule.FileVersionInfo</c>
+/// for the friendly app name — that touches the PE header on disk and can
+/// take 5-50ms per process the first time. Multiplied by 8-15 audio sessions
+/// every second on the UI thread, this was a major source of stutter when
+/// the expanded state was visible. <see cref="RefreshAsync"/> moves the work
+/// to a thread-pool thread, caches process-name lookups by PID, and only
+/// fires <see cref="SessionsChanged"/> when something actually changed.
+/// </para>
+/// </summary>
 public class VolumeMixerService : IDisposable
 {
     private MMDeviceEnumerator? _enumerator;
@@ -11,6 +25,14 @@ public class VolumeMixerService : IDisposable
     private readonly List<AudioSession> _sessions = new();
     private readonly object _lock = new();
     private bool _disposed;
+
+    /// <summary>PID → cached friendly name. Survives across refreshes;
+    /// cleared when a PID is no longer in the session list (cheap LRU).</summary>
+    private readonly Dictionary<uint, string> _nameCache = new();
+
+    /// <summary>Snapshot used for change-detection; SessionsChanged fires
+    /// only when this set differs from the freshly-polled one.</summary>
+    private string _lastFingerprint = "";
 
     public event Action? SessionsChanged;
 
@@ -28,13 +50,22 @@ public class VolumeMixerService : IDisposable
     }
 
     /// <summary>
-    /// Called from DispatcherTimer to refresh session list.
+    /// Background-thread refresh. Call from a 1-2s timer; returns immediately
+    /// and dispatches <see cref="SessionsChanged"/> only if the session list
+    /// actually changed (added/removed sessions, or volume/mute differs).
     /// </summary>
-    public void Refresh()
+    public Task RefreshAsync() => Task.Run(RefreshCore);
+
+    /// <summary>Synchronous version — kept for callers that aren't on a
+    /// dispatcher (e.g. unit tests). Not for the polling timer.</summary>
+    public void Refresh() => RefreshCore();
+
+    private void RefreshCore()
     {
         if (_disposed || _device == null) return;
 
         var newSessions = new List<AudioSession>();
+        var seenPids = new HashSet<uint>();
 
         try
         {
@@ -56,13 +87,16 @@ public class VolumeMixerService : IDisposable
                     name.Contains("%SystemRoot%", StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                var pid = session.GetProcessID;
+                seenPids.Add(pid);
+
                 newSessions.Add(new AudioSession
                 {
                     Id = session.GetSessionIdentifier ?? $"session_{i}",
                     DisplayName = name,
                     Volume = session.SimpleAudioVolume.Volume,
                     IsMuted = session.SimpleAudioVolume.Mute,
-                    ProcessId = session.GetProcessID
+                    ProcessId = pid
                 });
             }
         }
@@ -71,36 +105,79 @@ public class VolumeMixerService : IDisposable
             // Audio subsystem can throw during device changes
         }
 
+        // Build a cheap fingerprint that captures membership + volume/mute
+        // changes without serializing the whole list. If unchanged, we don't
+        // wake the UI for a no-op refresh — which is the common steady state.
+        var fingerprint = BuildFingerprint(newSessions);
+
+        bool changed;
         lock (_lock)
         {
-            _sessions.Clear();
-            _sessions.AddRange(newSessions);
+            changed = fingerprint != _lastFingerprint;
+            if (changed)
+            {
+                _sessions.Clear();
+                _sessions.AddRange(newSessions);
+                _lastFingerprint = fingerprint;
+
+                // Drop name-cache entries for PIDs that disappeared so the
+                // dict doesn't grow unbounded across long sessions.
+                if (_nameCache.Count > seenPids.Count + 16)
+                {
+                    var stale = _nameCache.Keys.Where(k => !seenPids.Contains(k)).ToList();
+                    foreach (var k in stale) _nameCache.Remove(k);
+                }
+            }
         }
 
-        SessionsChanged?.Invoke();
+        if (changed) SessionsChanged?.Invoke();
     }
 
-    private static string GetSessionName(AudioSessionControl session)
+    private static string BuildFingerprint(List<AudioSession> sessions)
     {
-        // Try display name first
+        // Stable order + ID + 2-decimal volume + mute. Volume rounding so we
+        // don't churn UI on micro-drift from system mixer.
+        var sb = new System.Text.StringBuilder(sessions.Count * 32);
+        foreach (var s in sessions.OrderBy(x => x.Id, StringComparer.Ordinal))
+            sb.Append(s.Id).Append('|').Append((int)(s.Volume * 100)).Append('|').Append(s.IsMuted ? 'M' : 'U').Append(';');
+        return sb.ToString();
+    }
+
+    private string GetSessionName(AudioSessionControl session)
+    {
+        // Try display name first — free, no process lookup needed.
         var display = session.DisplayName;
         if (!string.IsNullOrWhiteSpace(display) && display != "@%SystemRoot%")
             return display;
 
-        // Fall back to process name
+        // Fall back to process name — cached because Process.MainModule
+        // re-reads the PE header from disk every call. Cost is real on
+        // browsers / electron apps.
+        var pid = session.GetProcessID;
+        if (pid == 0) return "";
+
+        lock (_lock)
+        {
+            if (_nameCache.TryGetValue(pid, out var cached)) return cached;
+        }
+
+        string name = "";
         try
         {
-            var pid = session.GetProcessID;
-            if (pid == 0) return "";
             var proc = System.Diagnostics.Process.GetProcessById((int)pid);
-            var name = proc.MainModule?.FileVersionInfo?.FileDescription;
-            if (!string.IsNullOrWhiteSpace(name)) return name;
-            return proc.ProcessName;
+            var desc = proc.MainModule?.FileVersionInfo?.FileDescription;
+            name = !string.IsNullOrWhiteSpace(desc) ? desc : proc.ProcessName;
         }
         catch
         {
-            return "";
+            // process gone, access denied, etc. — leave name empty
         }
+
+        lock (_lock)
+        {
+            _nameCache[pid] = name;
+        }
+        return name;
     }
 
     public IReadOnlyList<AudioSession> GetSessions()

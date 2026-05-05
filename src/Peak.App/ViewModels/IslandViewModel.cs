@@ -616,15 +616,27 @@ public partial class IslandViewModel : ObservableObject
             IsPlaying = info.IsPlaying;
             HasMedia = true;
 
-            if (info.Thumbnail != null)
+            // Decode the album-art on a background thread — JPEG/PNG decode
+            // for a 300×300 thumbnail can take 5-30ms on the UI thread, which
+            // shows up as a visible stutter on every track change. Freeze()
+            // makes the BitmapImage cross-thread-safe so we can assign the
+            // resulting bitmap back to the bound property from the UI thread.
+            if (info.Thumbnail is { Length: > 0 } thumb)
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.StreamSource = new MemoryStream(info.Thumbnail);
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                bmp.Freeze();
-                AlbumArt = bmp;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.StreamSource = new MemoryStream(thumb);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        _dispatcher.BeginInvoke((Action)(() => AlbumArt = bmp));
+                    }
+                    catch { /* malformed thumbnail bytes — keep previous art */ }
+                });
             }
 
             // Only peek if collapsed — don't disturb Hidden or Expanded states
@@ -633,14 +645,27 @@ public partial class IslandViewModel : ObservableObject
         });
     }
 
+    // Cached "previous" snapshot — skip the UI dispatch entirely if nothing
+    // visible changed (1Hz tick × seconds rounded → most ticks are no-ops).
+    private int _lastPositionSec = -1;
+    private int _lastDurationSec = -1;
+
     private void OnMediaPositionChanged(TimeSpan position, TimeSpan duration)
     {
-        _dispatcher.Invoke(() =>
+        var posSec = (int)position.TotalSeconds;
+        var durSec = (int)duration.TotalSeconds;
+        if (posSec == _lastPositionSec && durSec == _lastDurationSec) return;
+        _lastPositionSec = posSec;
+        _lastDurationSec = durSec;
+
+        // BeginInvoke (was Invoke) so the background MediaService thread
+        // doesn't block waiting for the dispatcher when the UI is busy.
+        _dispatcher.BeginInvoke((Action)(() =>
         {
-            if (duration.TotalSeconds > 0)
+            if (durSec > 0)
             {
                 HasMediaProgress = true;
-                MediaProgress = Math.Clamp(position.TotalSeconds / duration.TotalSeconds, 0, 1);
+                MediaProgress = Math.Clamp((double)posSec / durSec, 0, 1);
                 MediaPositionText = $"{FormatTime(position)} / {FormatTime(duration)}";
             }
             else
@@ -649,7 +674,7 @@ public partial class IslandViewModel : ObservableObject
                 MediaProgress = 0;
                 MediaPositionText = string.Empty;
             }
-        });
+        }));
     }
 
     private static string FormatTime(TimeSpan t) =>
@@ -657,7 +682,10 @@ public partial class IslandViewModel : ObservableObject
 
     private void OnStatsUpdated(SystemStats stats)
     {
-        _dispatcher.Invoke(() =>
+        // BeginInvoke from the SystemMonitorService background thread —
+        // [ObservableProperty] already short-circuits same-value writes, so
+        // no extra dedup needed here.
+        _dispatcher.BeginInvoke((Action)(() =>
         {
             CpuUsage = stats.CpuUsage;
             GpuUsage = stats.GpuUsage;
@@ -665,16 +693,29 @@ public partial class IslandViewModel : ObservableObject
             BatteryPercent = stats.BatteryPercent;
             IsCharging = stats.IsCharging;
             HasBattery = stats.BatteryPercent.HasValue;
-        });
+        }));
     }
+
+    // Bucketed cache so we only push string updates when the formatted speed
+    // actually changed. FormatSpeed allocates a new string per call —
+    // unnecessary churn on quiet links.
+    private long _lastDownloadBucket = -1;
+    private long _lastUploadBucket = -1;
 
     private void OnNetworkStatsUpdated(NetworkStats stats)
     {
-        _dispatcher.Invoke(() =>
+        // Round to 1 KB/s buckets — sub-bucket jitter is invisible anyway.
+        var dlBucket = (long)(stats.DownloadBytesPerSec / 1024);
+        var ulBucket = (long)(stats.UploadBytesPerSec / 1024);
+        if (dlBucket == _lastDownloadBucket && ulBucket == _lastUploadBucket) return;
+        _lastDownloadBucket = dlBucket;
+        _lastUploadBucket = ulBucket;
+
+        _dispatcher.BeginInvoke((Action)(() =>
         {
             DownloadSpeed = NetworkMonitorService.FormatSpeed(stats.DownloadBytesPerSec);
             UploadSpeed = NetworkMonitorService.FormatSpeed(stats.UploadBytesPerSec);
-        });
+        }));
     }
 
     private void OnNewNotification(NotificationData data)
@@ -683,12 +724,15 @@ public partial class IslandViewModel : ObservableObject
         {
             var settings = _settingsManager.Settings;
 
-            // Track seen apps so users can mute them in Settings
+            // Track seen apps so users can mute them in Settings. The save
+            // itself runs on a thread-pool thread — JsonSerializer + temp-file
+            // + File.Move on the dispatcher used to be a real hitch on first
+            // notification from each app.
             if (!string.IsNullOrEmpty(data.AppName) &&
                 !settings.SeenNotificationApps.Contains(data.AppName))
             {
                 settings.SeenNotificationApps.Add(data.AppName);
-                _settingsManager.Save();
+                _ = Task.Run(() => _settingsManager.Save());
             }
 
             // Respect per-app mute
@@ -707,7 +751,7 @@ public partial class IslandViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Three-layer icon resolution for an incoming Windows notification:
+    /// Background-thread-safe layers of the notification-icon resolver:
     ///
     ///   1. The bytes the toast itself ships (<see cref="NotificationData.IconBytes"/>) —
     ///      from <c>UserNotification.AppInfo.DisplayInfo.GetLogo</c>. Most reliable for
@@ -715,10 +759,12 @@ public partial class IslandViewModel : ObservableObject
     ///   2. <see cref="Helpers.IconExtractor"/> via the AppUserModelId. The same
     ///      <c>IShellItemImageFactory</c> path Peak uses for Spotlight icons —
     ///      catches Win32 apps and UWP apps the toast's DisplayInfo missed.
-    ///   3. A coloured letter avatar generated from the AppName. Always succeeds;
-    ///      ensures the notification slot is never empty.
+    ///
+    /// Returns null if both layers failed; the caller (UI thread) then falls
+    /// back to <see cref="BuildLetterAvatar"/>, which can't run off-thread
+    /// because it draws into a <c>RenderTargetBitmap</c> via DrawingVisual.
     /// </summary>
-    private static ImageSource? ResolveNotificationIcon(NotificationData data)
+    private static ImageSource? TryResolveNotificationIconOffThread(NotificationData data)
     {
         // Layer 1: bytes embedded in the toast.
         if (data.IconBytes is { Length: > 0 })
@@ -730,7 +776,7 @@ public partial class IslandViewModel : ObservableObject
                 bmp.StreamSource = new MemoryStream(data.IconBytes);
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.EndInit();
-                bmp.Freeze();
+                bmp.Freeze(); // makes the BitmapImage cross-thread-safe
                 return bmp;
             }
             catch { /* malformed bytes — fall through to next layer */ }
@@ -741,12 +787,16 @@ public partial class IslandViewModel : ObservableObject
         // would show for that app from the Shell namespace.
         if (!string.IsNullOrWhiteSpace(data.AppUserModelId))
         {
-            var shellIcon = Helpers.IconExtractor.GetIcon($"shell:appsFolder\\{data.AppUserModelId}", 32);
-            if (shellIcon != null) return shellIcon;
+            try
+            {
+                var shellIcon = Helpers.IconExtractor.GetIcon($"shell:appsFolder\\{data.AppUserModelId}", 32);
+                if (shellIcon is System.Windows.Freezable f && f.CanFreeze && !f.IsFrozen) f.Freeze();
+                if (shellIcon != null) return shellIcon;
+            }
+            catch { /* shell call can throw on broken AUMIDs */ }
         }
 
-        // Layer 3: synthesise a letter avatar so the icon column is never blank.
-        return BuildLetterAvatar(data.AppName);
+        return null;
     }
 
     /// <summary>
@@ -817,7 +867,22 @@ public partial class IslandViewModel : ObservableObject
         NotificationApp = data.AppName;
         CurrentNotificationAumid = data.AppUserModelId;
 
-        NotificationIcon = ResolveNotificationIcon(data);
+        // Resolve the icon on a background thread — Layer 1 (BitmapImage
+        // decode) and Layer 2 (shell:appsFolder lookup via IShellItemImage-
+        // Factory) are the slow paths and don't need the UI thread. The
+        // letter-avatar fallback (Layer 3) draws into a RenderTargetBitmap
+        // which DOES need a UI/STA thread, so it stays on the dispatcher.
+        // We clear the icon up front so a stale one doesn't peek through
+        // while the resolver runs.
+        NotificationIcon = null;
+        _ = Task.Run(() =>
+        {
+            var resolved = TryResolveNotificationIconOffThread(data);
+            _dispatcher.BeginInvoke((Action)(() =>
+            {
+                NotificationIcon = resolved ?? BuildLetterAvatar(data.AppName);
+            }));
+        });
 
         HasNotification = true;
 
@@ -1014,15 +1079,18 @@ public partial class IslandViewModel : ObservableObject
             {
                 var img = System.Windows.Clipboard.GetImage();
                 if (img == null) return null;
-                // Hash: dimensions + sampled pixel bytes for uniqueness
-                int stride = img.PixelWidth * ((img.Format.BitsPerPixel + 7) / 8);
-                var pixels = new byte[stride * img.PixelHeight];
-                img.CopyPixels(pixels, stride, 0);
-                // Sample ~64 bytes spread across the image
+                // Cheap fingerprint: dimensions + a 64-byte slice from the
+                // first row only. Was allocating the full pixel buffer every
+                // poll (could be 8+ MB for a 4K screenshot) just to throw it
+                // away after sampling — that's the whole image churning
+                // through the LOH on each clipboard tick.
+                int bpp = (img.Format.BitsPerPixel + 7) / 8;
+                int stride = img.PixelWidth * bpp;
+                int sampleBytes = Math.Min(stride, 64);
+                var sample = new byte[sampleBytes];
+                img.CopyPixels(new Int32Rect(0, 0, sampleBytes / bpp, 1), sample, sampleBytes, 0);
                 long hash = img.PixelWidth * 31L + img.PixelHeight;
-                int step = Math.Max(1, pixels.Length / 64);
-                for (int i = 0; i < pixels.Length; i += step)
-                    hash = hash * 31 + pixels[i];
+                for (int i = 0; i < sample.Length; i++) hash = hash * 31 + sample[i];
                 return hash.ToString();
             }
             catch { return null; }
@@ -1064,7 +1132,10 @@ public partial class IslandViewModel : ObservableObject
         _clipboardService.HistoryChanged += () => _dispatcher.Invoke(RefreshClipboardHistory);
 
         // Poll clipboard every 500ms on UI thread
-        _clipboardPollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        // 1000ms (was 500ms) — clipboard changes are user-triggered, half-
+        // second granularity is invisible. Halves the dispatcher load from
+        // this poll on its own.
+        _clipboardPollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
         _clipboardPollTimer.Tick += (_, _) => _clipboardService.Poll();
         _clipboardPollTimer.Start();
     }
@@ -1135,15 +1206,23 @@ public partial class IslandViewModel : ObservableObject
     private void InitializeVolumeMixer()
     {
         _volumeMixerService.Initialize();
-        _volumeMixerService.SessionsChanged += () => _dispatcher.Invoke(RefreshAudioSessions);
+        // SessionsChanged now arrives from a thread-pool thread (RefreshAsync
+        // runs on Task.Run). BeginInvoke instead of Invoke so the audio service
+        // doesn't block on the UI thread when a refresh actually has changes.
+        _volumeMixerService.SessionsChanged += () =>
+            _dispatcher.BeginInvoke((Action)RefreshAudioSessions);
 
-        // Poll every 1s
-        _volumeMixerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _volumeMixerTimer.Tick += (_, _) => _volumeMixerService.Refresh();
+        // Poll every 2s on a background thread. Was 1s on UI thread; the
+        // session enumeration touches Process.MainModule (PE-header read) per
+        // session, so even with caching the cost is real and not worth doing
+        // more often than 2s for a feature few users actively watch.
+        _volumeMixerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _volumeMixerTimer.Tick += (_, _) => _ = _volumeMixerService.RefreshAsync();
         _volumeMixerTimer.Start();
 
-        // Initial refresh
-        _volumeMixerService.Refresh();
+        // Initial refresh — also off-thread; the first scan is the most
+        // expensive because the name cache is empty.
+        _ = _volumeMixerService.RefreshAsync();
     }
 
     private void RefreshAudioSessions()
@@ -1158,14 +1237,16 @@ public partial class IslandViewModel : ObservableObject
     private void ToggleMute(string sessionId)
     {
         _volumeMixerService.ToggleMute(sessionId);
-        _volumeMixerService.Refresh();
+        // User-initiated → kick an immediate background refresh so the UI
+        // reflects the new mute state without waiting for the next 2s tick.
+        _ = _volumeMixerService.RefreshAsync();
     }
 
     [RelayCommand]
     private void SetSessionVolume((string Id, float Volume) args)
     {
         _volumeMixerService.SetVolume(args.Id, args.Volume);
-        _volumeMixerService.Refresh();
+        _ = _volumeMixerService.RefreshAsync();
     }
 
     public void Cleanup()

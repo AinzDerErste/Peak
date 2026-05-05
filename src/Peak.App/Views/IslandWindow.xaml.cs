@@ -686,7 +686,13 @@ public partial class IslandWindow : Window
             if (!seen.Contains(procName, StringComparer.OrdinalIgnoreCase))
             {
                 seen.Add(procName);
-                try { _viewModel.SettingsManager.Save(); } catch { /* disk hiccup — try next time */ }
+                // Save off the UI thread — JsonSerializer + temp-file rename
+                // on the dispatcher used to be a real hitch the first time
+                // each game went fullscreen.
+                _ = Task.Run(() =>
+                {
+                    try { _viewModel.SettingsManager.Save(); } catch { /* disk hiccup — try next time */ }
+                });
             }
         }
 
@@ -1430,6 +1436,12 @@ public partial class IslandWindow : Window
 
     private void OnVisualizerLevels(float[] levels)
     {
+        // Cheap early-out before queueing the dispatcher work — the FFT thread
+        // fires ~20 Hz; without this gate every frame allocates a closure and
+        // pays the dispatcher round-trip even when the visualizer was just
+        // stopped (window collapsed, paused, etc.).
+        if (!_visualizerRunning) return;
+
         Dispatcher.InvokeAsync(() =>
         {
             if (!_visualizerRunning) return;
@@ -1469,38 +1481,57 @@ public partial class IslandWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Fast early-out — the VM fires dozens of property changes per second
+        // (CpuUsage, MemoryUsage, GpuUsage, DownloadSpeed, MediaPosition, …)
+        // and most of them aren't handled here. Without this gate every tick
+        // pays the cost of the if/else chain plus a redundant Dispatcher.
+        var name = e.PropertyName;
+        if (string.IsNullOrEmpty(name)) return;
+
+        // All VM property setters now run on the UI thread (background-thread
+        // services dispatch via BeginInvoke before mutating). PropertyChanged
+        // therefore fires on the UI thread — Dispatcher.Invoke here was a
+        // sync round-trip with no actual cross-thread work to do.
+
         // Update visualizer on relevant changes
-        if (e.PropertyName is nameof(IslandViewModel.CurrentState)
+        if (name is nameof(IslandViewModel.CurrentState)
             or nameof(IslandViewModel.IsPlaying)
             or nameof(IslandViewModel.HasMedia))
         {
-            Dispatcher.Invoke(UpdateVisualizerState);
+            UpdateVisualizerState();
         }
 
-        if (e.PropertyName == nameof(IslandViewModel.CurrentState))
-            Dispatcher.Invoke(() => TransitionToState(_viewModel.CurrentState));
-        else if (e.PropertyName == nameof(IslandViewModel.IsVisible))
-            Dispatcher.Invoke(() =>
-            {
-                if (_hiddenByFullscreen) return;
-                if (_viewModel.IsVisible) Show();
-                else Hide();
-            });
-        else if (e.PropertyName == nameof(IslandViewModel.IsEditMode))
-            Dispatcher.Invoke(() => SetEditModeVisibility(_viewModel.IsEditMode));
-        else if (e.PropertyName == nameof(IslandViewModel.HasNotification))
-            Dispatcher.Invoke(() => UpdateNotificationBanner());
-        else if (e.PropertyName == nameof(IslandViewModel.IsLiveStream))
-            // Livestream toggle changes the Media row's height (no progress bar).
-            Dispatcher.Invoke(UpdateRowVisibility);
-        else if (e.PropertyName is "Row0Mode" or "Row1Mode" or "Row2Mode")
+        if (name == nameof(IslandViewModel.CurrentState))
         {
-            var row = int.Parse(e.PropertyName![3..4]);
-            Dispatcher.Invoke(() => { ApplyRowMode(row); UpdateRowVisibility(); });
+            TransitionToState(_viewModel.CurrentState);
         }
-        else if (e.PropertyName is "Slot0" or "Slot1" or "Slot2" or "Slot3" or "Slot4" or "Slot5")
+        else if (name == nameof(IslandViewModel.IsVisible))
         {
-            var index = int.Parse(e.PropertyName![4..]);
+            if (_hiddenByFullscreen) return;
+            if (_viewModel.IsVisible) Show(); else Hide();
+        }
+        else if (name == nameof(IslandViewModel.IsEditMode))
+        {
+            SetEditModeVisibility(_viewModel.IsEditMode);
+        }
+        else if (name == nameof(IslandViewModel.HasNotification))
+        {
+            UpdateNotificationBanner();
+        }
+        else if (name == nameof(IslandViewModel.IsLiveStream))
+        {
+            // Livestream toggle changes the Media row's height (no progress bar).
+            UpdateRowVisibility();
+        }
+        else if (name is "Row0Mode" or "Row1Mode" or "Row2Mode")
+        {
+            var row = int.Parse(name.AsSpan(3, 1));
+            ApplyRowMode(row);
+            UpdateRowVisibility();
+        }
+        else if (name is "Slot0" or "Slot1" or "Slot2" or "Slot3" or "Slot4" or "Slot5")
+        {
+            var index = int.Parse(name.AsSpan(4));
             var type = index switch
             {
                 0 => _viewModel.Slot0, 1 => _viewModel.Slot1,
@@ -1508,7 +1539,7 @@ public partial class IslandWindow : Window
                 4 => _viewModel.Slot4, 5 => _viewModel.Slot5,
                 _ => WidgetType.None
             };
-            Dispatcher.Invoke(() => RenderSlot(index, type));
+            RenderSlot(index, type);
         }
     }
 
@@ -1618,6 +1649,17 @@ public partial class IslandWindow : Window
         _currentW = targetW;
         _currentH = targetH;
 
+        // Cancel any previous fade-in animations on every content panel
+        // BEFORE we set their opacity. Without this, rapid Peek↔Expanded
+        // toggles (e.g. a notification arriving while the user hovers) stack
+        // opacity animations on the same element — each one fights to reach
+        // 1.0 with overlapping completion handlers, producing the "hangs in
+        // Expanded state" symptom and leaking ChangeNotificationListeners.
+        CollapsedContent.BeginAnimation(OpacityProperty, null);
+        PeekContent.BeginAnimation(OpacityProperty, null);
+        ExpandedContent.BeginAnimation(OpacityProperty, null);
+        SpotlightContent.BeginAnimation(OpacityProperty, null);
+
         // Hide ALL content during scale to avoid text distortion
         CollapsedContent.Opacity = 0;
         PeekContent.Opacity = 0;
@@ -1670,20 +1712,19 @@ public partial class IslandWindow : Window
             _ => _collapsedOverlay ?? (UIElement)CollapsedContent
         };
 
-        // Start content fade-in at 60% of scale duration (parallel, not sequential)
-        var fadeDelay = TimeSpan.FromMilliseconds(durationMs * 0.6);
-        var fadeTimer = new DispatcherTimer { Interval = fadeDelay };
-        fadeTimer.Tick += (_, _) =>
+        // Start content fade-in at 60% of scale duration (parallel with the
+        // scale animation). BeginTime defers the value transition without
+        // needing a DispatcherTimer — the previous version allocated a fresh
+        // DispatcherTimer per state change and never disposed them on
+        // interruption, leaving zombie Tick handlers that fired after the
+        // window had moved on to the next state.
+        var fadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(120)))
         {
-            fadeTimer.Stop();
-            var fadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(120)))
-            {
-                FillBehavior = FillBehavior.Stop
-            };
-            fadeIn.Completed += (_, _) => activeContent.Opacity = 1;
-            activeContent.BeginAnimation(OpacityProperty, fadeIn);
+            BeginTime = TimeSpan.FromMilliseconds(durationMs * 0.6),
+            FillBehavior = FillBehavior.Stop
         };
-        fadeTimer.Start();
+        fadeIn.Completed += (_, _) => activeContent.Opacity = 1;
+        activeContent.BeginAnimation(OpacityProperty, fadeIn);
 
         scaleYAnim.Completed += (_, _) =>
         {
