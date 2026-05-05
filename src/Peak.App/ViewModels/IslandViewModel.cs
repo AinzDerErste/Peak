@@ -328,7 +328,7 @@ public partial class IslandViewModel : ObservableObject
         // Service events
         _mediaService.MediaChanged += OnMediaChanged;
         _mediaService.PositionChanged += OnMediaPositionChanged;
-        _mediaService.SessionClosed += () => _dispatcher.Invoke(() => HasMedia = false);
+        _mediaService.SessionClosed += OnMediaSessionClosed;
         _systemMonitorService.StatsUpdated += OnStatsUpdated;
         _networkMonitorService.StatsUpdated += OnNetworkStatsUpdated;
         _notificationService.NewNotification += OnNewNotification;
@@ -607,6 +607,20 @@ public partial class IslandViewModel : ObservableObject
         IsEditMode = false;
     }
 
+    /// <summary>Last seen track identity (Title|Artist|Album). When this
+    /// changes we know we're on a new track and stale album art must be
+    /// cleared even if the new MediaInfo doesn't yet ship a thumbnail.</summary>
+    private string _lastTrackKey = "";
+
+    /// <summary>
+    /// Monotonic token bumped on every track change. Background bitmap
+    /// decodes capture this at start; on completion they only assign to
+    /// <see cref="AlbumArt"/> if the token still matches. Without this,
+    /// rapidly skipping two tracks could let the slower decode (track N)
+    /// land after the faster decode (track N+1), leaving the wrong art.
+    /// </summary>
+    private int _albumArtToken;
+
     private void OnMediaChanged(MediaInfo info)
     {
         _dispatcher.Invoke(() =>
@@ -616,13 +630,31 @@ public partial class IslandViewModel : ObservableObject
             IsPlaying = info.IsPlaying;
             HasMedia = true;
 
-            // Decode the album-art on a background thread — JPEG/PNG decode
-            // for a 300×300 thumbnail can take 5-30ms on the UI thread, which
-            // shows up as a visible stutter on every track change. Freeze()
-            // makes the BitmapImage cross-thread-safe so we can assign the
-            // resulting bitmap back to the bound property from the UI thread.
+            // Track-change detection: if title/artist/album changed, clear
+            // the stale art FIRST. Then if a new thumbnail came in this
+            // refresh, decode + assign it; if it didn't (SMTC sometimes
+            // sends metadata before the thumbnail finishes loading), the
+            // album-art slot stays blank until the next refresh fills it
+            // — which is correct behaviour vs. showing the previous track's
+            // art under the new title.
+            var newKey = info.TrackKey;
+            var trackChanged = newKey != _lastTrackKey;
+            if (trackChanged)
+            {
+                _lastTrackKey = newKey;
+                AlbumArt = null;
+                // Force-emit the next position update even if it numerically
+                // matches the cached bucket — different track, must redraw.
+                _lastPositionSec = -1;
+                _lastDurationSec = -1;
+                _albumArtToken++; // invalidate any in-flight decode from previous track
+            }
+
             if (info.Thumbnail is { Length: > 0 } thumb)
             {
+                // Capture the token at dispatch time so a slow decode for an
+                // older track can't overwrite the latest art.
+                int myToken = _albumArtToken;
                 _ = Task.Run(() =>
                 {
                     try
@@ -633,9 +665,15 @@ public partial class IslandViewModel : ObservableObject
                         bmp.CacheOption = BitmapCacheOption.OnLoad;
                         bmp.EndInit();
                         bmp.Freeze();
-                        _dispatcher.BeginInvoke((Action)(() => AlbumArt = bmp));
+                        _dispatcher.BeginInvoke((Action)(() =>
+                        {
+                            // Token gate — discard if a newer track has been
+                            // selected while we were decoding.
+                            if (myToken == _albumArtToken)
+                                AlbumArt = bmp;
+                        }));
                     }
-                    catch { /* malformed thumbnail bytes — keep previous art */ }
+                    catch { /* malformed thumbnail bytes — keep current state */ }
                 });
             }
 
@@ -679,6 +717,33 @@ public partial class IslandViewModel : ObservableObject
 
     private static string FormatTime(TimeSpan t) =>
         t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+
+    /// <summary>
+    /// Called from MediaService when SMTC reports no current session
+    /// (last source app closed, all media paused-and-released, …). Resets
+    /// every cached scrap of the previous session so a future first-track
+    /// has a clean slate — without this, the album art and position text
+    /// would linger from the previous session and only refresh on the
+    /// next real metadata event.
+    /// </summary>
+    private void OnMediaSessionClosed()
+    {
+        _dispatcher.Invoke(() =>
+        {
+            HasMedia = false;
+            HasMediaProgress = false;
+            IsPlaying = false;
+            MediaTitle = string.Empty;
+            MediaArtist = string.Empty;
+            MediaPositionText = string.Empty;
+            MediaProgress = 0;
+            AlbumArt = null;
+            _lastTrackKey = "";
+            _lastPositionSec = -1;
+            _lastDurationSec = -1;
+            _albumArtToken++;
+        });
+    }
 
     private void OnStatsUpdated(SystemStats stats)
     {
@@ -1260,6 +1325,7 @@ public partial class IslandViewModel : ObservableObject
         // Unsubscribe from service events to prevent leaks
         _mediaService.MediaChanged -= OnMediaChanged;
         _mediaService.PositionChanged -= OnMediaPositionChanged;
+        _mediaService.SessionClosed -= OnMediaSessionClosed;
         _systemMonitorService.StatsUpdated -= OnStatsUpdated;
         _networkMonitorService.StatsUpdated -= OnNetworkStatsUpdated;
         _notificationService.NewNotification -= OnNewNotification;
