@@ -347,10 +347,40 @@ public class MediaService : IDisposable
         catch { /* Session may have been disposed mid-call */ }
     }
 
+    /// <summary>
+    /// Resume or pause based on the session's currently-reported playback
+    /// status. Avoids <c>TryTogglePlayPauseAsync</c> because it's racy on
+    /// some apps (Spotify in particular): if the previous pause state hadn't
+    /// fully propagated to SMTC yet, Toggle reads stale "playing" and
+    /// pauses a second time — looking like the play button is dead from
+    /// the user's perspective. Reading the live status and dispatching to
+    /// the explicit Play/Pause method makes the intent unambiguous.
+    /// </summary>
     public async Task PlayPauseAsync()
     {
         var s = SnapshotSession();
-        if (s != null) await s.TryTogglePlayPauseAsync();
+        if (s == null) return;
+
+        bool isPlaying;
+        try
+        {
+            isPlaying = s.GetPlaybackInfo().PlaybackStatus
+                == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+        }
+        catch
+        {
+            // GetPlaybackInfo can throw on a torn-down session; fall back to
+            // the toggle in that one case so we don't silently no-op.
+            try { await s.TryTogglePlayPauseAsync(); } catch { }
+            return;
+        }
+
+        try
+        {
+            if (isPlaying) await s.TryPauseAsync();
+            else            await s.TryPlayAsync();
+        }
+        catch { /* session disposed between status read and call */ }
     }
 
     public async Task NextAsync()

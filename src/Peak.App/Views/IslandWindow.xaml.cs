@@ -878,14 +878,25 @@ public partial class IslandWindow : Window
                     GreetingText.BeginAnimation(OpacityProperty, null);
                     GreetingText.Opacity = 0;
 
-                    // Show normal collapsed content with fade in
-                    CollapsedContent.Visibility = Visibility.Visible;
-                    var contentFadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(250)))
+                    // Only restore the collapsed slot row if the user is
+                    // still in a state that *uses* it. The greeting fades
+                    // out 5 s after it appears; in the meantime the user
+                    // might have expanded or peeked, and unconditionally
+                    // setting Visibility=Visible here was painting the
+                    // collapsed widget row on top of ExpandedContent /
+                    // PeekContent. Mirrors the guard SetCollapsedOverlay
+                    // uses when restoring after a plugin overlay clears.
+                    if (_currentAnimatedState is IslandState.Collapsed or IslandState.Hidden
+                        && _collapsedOverlay == null)
                     {
-                        FillBehavior = FillBehavior.Stop
-                    };
-                    contentFadeIn.Completed += (_, _) => CollapsedContent.Opacity = 1;
-                    CollapsedContent.BeginAnimation(OpacityProperty, contentFadeIn);
+                        CollapsedContent.Visibility = Visibility.Visible;
+                        var contentFadeIn = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(250)))
+                        {
+                            FillBehavior = FillBehavior.Stop
+                        };
+                        contentFadeIn.Completed += (_, _) => CollapsedContent.Opacity = 1;
+                        CollapsedContent.BeginAnimation(OpacityProperty, contentFadeIn);
+                    }
                 };
                 GreetingText.BeginAnimation(OpacityProperty, fadeOut);
                 ((TranslateTransform)GreetingText.RenderTransform).BeginAnimation(TranslateTransform.YProperty, slideOut);
