@@ -225,12 +225,14 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
     {
         _host = host;
 
-        // Register collapsed renderer for the TeamSpeakCallCount slot
+        // Register collapsed renderer for the TeamSpeakCallCount slot.
+        // Snapshot _client — see OnVoiceChannelChanged comment block.
         host.SetCollapsedRenderer(kind =>
         {
             if (kind != CollapsedWidgetKind.TeamSpeakCallCount && kind != CollapsedWidgetKind.VoiceCallCount) return null;
-            if (_client == null || string.IsNullOrEmpty(_client.CurrentChannelId)) return null;
-            if (_client.Participants.Count == 0) return null;
+            var client = _client;
+            if (client == null || string.IsNullOrEmpty(client.CurrentChannelId)) return null;
+            if (client.Participants.Count == 0) return null;
             return BuildCallCountUi();
         });
 
@@ -320,11 +322,12 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
 
     private void OnDisconnected()
     {
+        var client = _client; // snapshot — see comment above OnVoiceChannelChanged
         _speakingNow.Clear();
         // Clear client state so collapsed renderer won't show stale data
-        if (_client != null)
+        if (client != null)
         {
-            _client.Participants.Clear();
+            client.Participants.Clear();
         }
         _host?.SetViewModelProperty("TeamSpeakCallCount", 0);
         _host?.SetViewModelProperty("TeamSpeakCallCountDisplay", "");
@@ -332,12 +335,20 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         _host?.RefreshCollapsedSlots();
     }
 
+    // Each handler below snapshots `_client` to a local. The connect-loop
+    // worker can null out `_client` at any time (disconnect, settings reset,
+    // reconnect cycle). Without the snapshot, a queued event from the
+    // WebSocket read-loop can race the assignment between the null-check
+    // and the next field read, producing a NullReferenceException in fire-
+    // and-forget code → process down. Same idiom as DiscordPlugin.
+
     private void OnVoiceChannelChanged()
     {
-        if (_client == null) return;
+        var client = _client;
+        if (client == null) return;
         _speakingNow.Clear();
 
-        if (string.IsNullOrEmpty(_client.CurrentChannelId) || IsLocalUserInAfkChannel())
+        if (string.IsNullOrEmpty(client.CurrentChannelId) || IsLocalUserInAfkChannel())
         {
             // Either not in any voice channel, or sitting in a designated AFK
             // channel — clear the visualizer entirely.
@@ -352,12 +363,13 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
 
     private void OnParticipantsChanged()
     {
-        if (_client == null) return;
+        var client = _client;
+        if (client == null) return;
 
         // Suppress the call counter while the local user is in an AFK channel.
         // The count snaps to 0 (and the collapsed slot's display goes blank) so
         // Peak doesn't advertise an active call when the user is just parking.
-        int count = IsLocalUserInAfkChannel() ? 0 : _client.Participants.Count;
+        int count = IsLocalUserInAfkChannel() ? 0 : client.Participants.Count;
         _host?.SetViewModelProperty("TeamSpeakCallCount", count);
         _host?.SetViewModelProperty("TeamSpeakCallCountDisplay", count > 0 ? count.ToString() : "");
         _host?.RefreshCollapsedSlots();
@@ -365,7 +377,8 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
 
     private void OnSpeakingChanged(string clientId, bool speaking)
     {
-        if (_client == null || string.IsNullOrEmpty(clientId)) return;
+        var client = _client;
+        if (client == null || string.IsNullOrEmpty(clientId)) return;
 
         // While in an AFK channel, ignore speaker events entirely so the
         // visualizer never lights up.
@@ -379,7 +392,7 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
         if (speaking)
         {
             _speakingNow.Add(clientId);
-            if (_client.Participants.TryGetValue(clientId, out var p))
+            if (client.Participants.TryGetValue(clientId, out var p))
                 ShowSpeaker(p.Nickname);
         }
         else
@@ -387,7 +400,7 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
             _speakingNow.Remove(clientId);
             if (_speakingNow.Count == 0)
             {
-                if (!string.IsNullOrEmpty(_client.CurrentChannelId))
+                if (!string.IsNullOrEmpty(client.CurrentChannelId))
                     ShowIdle();
                 else
                     _host?.SetVisualizerOverride(null);
@@ -396,7 +409,7 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
             {
                 // Show another active speaker
                 var other = _speakingNow.First();
-                if (_client.Participants.TryGetValue(other, out var p))
+                if (client.Participants.TryGetValue(other, out var p))
                     ShowSpeaker(p.Nickname);
             }
         }
@@ -411,9 +424,10 @@ public class TeamSpeakPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginS
     /// </summary>
     private bool IsLocalUserInAfkChannel()
     {
-        if (_client == null) return false;
-        var serverKey = _client.CurrentServerUid;
-        var channelId = _client.CurrentChannelId;
+        var client = _client; // snapshot — see comment above OnVoiceChannelChanged
+        if (client == null) return false;
+        var serverKey = client.CurrentServerUid;
+        var channelId = client.CurrentChannelId;
         if (string.IsNullOrEmpty(serverKey) || string.IsNullOrEmpty(channelId)) return false;
 
         if (!_settings.AfkChannelsByServer.TryGetValue(serverKey, out var afkList)) return false;

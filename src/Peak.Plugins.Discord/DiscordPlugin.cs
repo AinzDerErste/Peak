@@ -116,13 +116,16 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
     {
         _host = host;
 
-        // Register collapsed renderer for the DiscordCallCount slot
+        // Register collapsed renderer for the DiscordCallCount slot.
+        // Snapshot _rpc — see comment block above OnVoiceChannelChanged
+        // for the rationale; this delegate is invoked from UI thread but
+        // _rpc itself is mutated from the connect-loop worker.
         host.SetCollapsedRenderer(kind =>
         {
             if (kind != CollapsedWidgetKind.DiscordCallCount && kind != CollapsedWidgetKind.VoiceCallCount) return null;
-            // Only render when actively in a call with participants
-            if (_rpc == null || string.IsNullOrEmpty(_rpc.CurrentChannelId)) return null;
-            if (_rpc.Participants.Count == 0) return null;
+            var rpc = _rpc;
+            if (rpc == null || string.IsNullOrEmpty(rpc.CurrentChannelId)) return null;
+            if (rpc.Participants.Count == 0) return null;
             return BuildCallCountUi();
         });
 
@@ -204,12 +207,24 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
         _host?.RefreshCollapsedSlots();
     }
 
+    // ─── Event handlers ──────────────────────────────────────────────
+    //
+    // Every handler below snapshots `_rpc` to a local variable on entry.
+    // `_rpc` is reassigned to `null` from the connect-loop worker in the
+    // disconnect/reconnect path; without the snapshot, an event already
+    // queued on the read-loop thread can race the assignment between a
+    // null-check and the next field read, producing a NullReferenceException
+    // in fire-and-forget code → process down. The snapshot makes each
+    // handler observe a single coherent view of the client.
+
     private void OnVoiceChannelChanged()
     {
-        if (_rpc == null) return;
+        var rpc = _rpc;
+        if (rpc == null) return;
+
         _speakingNow.Clear();
 
-        if (string.IsNullOrEmpty(_rpc.CurrentChannelId))
+        if (string.IsNullOrEmpty(rpc.CurrentChannelId))
         {
             // Left a call → drop the override entirely, back to the audio visualizer.
             _host?.SetVisualizerOverride(null);
@@ -224,8 +239,9 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
 
     private void OnParticipantsChanged()
     {
-        if (_rpc == null) return;
-        int count = _rpc.Participants.Count;
+        var rpc = _rpc;
+        if (rpc == null) return;
+        int count = rpc.Participants.Count;
         _host?.SetViewModelProperty("DiscordCallCount", count);
         _host?.SetViewModelProperty("DiscordCallCountDisplay", count > 0 ? count.ToString() : "—");
         _host?.RefreshCollapsedSlots();
@@ -233,12 +249,13 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
 
     private void OnSpeakingChanged(string userId, bool speaking)
     {
-        if (_rpc == null || string.IsNullOrEmpty(userId)) return;
+        var rpc = _rpc;
+        if (rpc == null || string.IsNullOrEmpty(userId)) return;
 
         if (speaking)
         {
             _speakingNow.Add(userId);
-            if (_rpc.Participants.TryGetValue(userId, out var p))
+            if (rpc.Participants.TryGetValue(userId, out var p))
                 _ = ShowAvatarAsync(userId, p.AvatarHash, p.Discriminator);
         }
         else
@@ -247,7 +264,7 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
             if (_speakingNow.Count == 0)
             {
                 // No one is speaking → idle placeholder (not the last avatar).
-                if (!string.IsNullOrEmpty(_rpc.CurrentChannelId))
+                if (!string.IsNullOrEmpty(rpc.CurrentChannelId))
                     ShowIdle();
                 else
                     _host?.SetVisualizerOverride(null);
@@ -256,7 +273,7 @@ public class DiscordPlugin : IWidgetPlugin, IIslandIntegrationPlugin, IPluginSet
             {
                 // Someone else is still speaking → show any of them.
                 var other = _speakingNow.First();
-                if (_rpc.Participants.TryGetValue(other, out var p))
+                if (rpc.Participants.TryGetValue(other, out var p))
                     _ = ShowAvatarAsync(other, p.AvatarHash, p.Discriminator);
             }
         }

@@ -445,7 +445,17 @@ public class MediaService : IDisposable
             _currentSession = null;
             _generation++;
         }
+
         if (_manager != null)
+        {
             _manager.CurrentSessionChanged -= OnCurrentSessionChanged;
+            // GlobalSystemMediaTransportControlsSessionManager is a sealed
+            // WinRT projection that doesn't implement IDisposable — its
+            // underlying COM reference is released when the RCW is collected.
+            // We at least drop our reference here so on reload paths the old
+            // manager becomes GC-eligible immediately instead of staying
+            // pinned by the field for the lifetime of MediaService.
+            _manager = null;
+        }
     }
 }

@@ -4,6 +4,20 @@ using Peak.Core.Models;
 
 namespace Peak.Core.Services;
 
+/// <summary>
+/// Wraps the public weather endpoints with cooperative cancellation and
+/// timeout-bounded calls.
+///
+/// <para><b>Cancellation contract</b>: every public Fetch* method takes an
+/// optional <see cref="CancellationToken"/>. Callers SHOULD pass one tied
+/// to the app's lifetime so a 30-min poll tick that's still in flight when
+/// the user closes Peak doesn't keep a thread waiting on a TCP read.</para>
+///
+/// <para><b>Timeouts</b> are configured at the <see cref="HttpClient"/>
+/// level (<c>App.xaml.cs</c> registers the "Weather" client with a 15 s
+/// budget). Without that, a network blackhole on any of the four
+/// fall-through endpoints could chain into a worst-case 400 s wait.</para>
+/// </summary>
 public class WeatherService
 {
     private readonly HttpClient _httpClient;
@@ -20,7 +34,7 @@ public class WeatherService
     /// Resolve postal code to coordinates, then fetch weather.
     /// Priority: PostalCode > IP geolocation > manual lat/lon fallback.
     /// </summary>
-    public async Task<WeatherData?> FetchSmartAsync(string postalCode, string countryCode, double fallbackLat, double fallbackLon)
+    public async Task<WeatherData?> FetchSmartAsync(string postalCode, string countryCode, double fallbackLat, double fallbackLon, CancellationToken ct = default)
     {
         string cityName = "";
 
@@ -31,59 +45,64 @@ public class WeatherService
             {
                 var query = Uri.EscapeDataString($"{postalCode} {countryCode}");
                 var url = $"https://geocoding-api.open-meteo.com/v1/search?name={query}&count=1&language=de";
-                var geo = await _httpClient.GetFromJsonAsync<GeocodingResponse>(url);
+                var geo = await _httpClient.GetFromJsonAsync<GeocodingResponse>(url, ct);
                 if (geo?.Results is { Count: > 0 })
                 {
                     cityName = geo.Results[0].Name;
-                    var w = await FetchAsync(geo.Results[0].Latitude, geo.Results[0].Longitude);
+                    var w = await FetchAsync(geo.Results[0].Latitude, geo.Results[0].Longitude, ct);
                     if (w != null) w.CityName = cityName;
                     return w;
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { /* geocoding failed */ }
 
             // Fallback: try zippopotam.us for precise postal code lookup
             try
             {
                 var url = $"https://api.zippopotam.us/{countryCode.ToLower()}/{postalCode}";
-                var zip = await _httpClient.GetFromJsonAsync<ZipResponse>(url);
+                var zip = await _httpClient.GetFromJsonAsync<ZipResponse>(url, ct);
                 if (zip?.Places is { Count: > 0 })
                 {
                     cityName = zip.Places[0].PlaceName;
                     var w = await FetchAsync(
                         double.Parse(zip.Places[0].Latitude, System.Globalization.CultureInfo.InvariantCulture),
-                        double.Parse(zip.Places[0].Longitude, System.Globalization.CultureInfo.InvariantCulture));
+                        double.Parse(zip.Places[0].Longitude, System.Globalization.CultureInfo.InvariantCulture),
+                        ct);
                     if (w != null) w.CityName = cityName;
                     return w;
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { /* zip lookup failed */ }
         }
 
-        // 2. Fallback: IP geolocation
+        // 2. Fallback: IP geolocation. HTTPS so the response can't be MITM'd
+        //    into spoofing the user's location (changed from http://).
         try
         {
-            var geo = await _httpClient.GetFromJsonAsync<GeoIpResponse>("http://ip-api.com/json/?fields=lat,lon,city,status");
+            var geo = await _httpClient.GetFromJsonAsync<GeoIpResponse>("https://ip-api.com/json/?fields=lat,lon,city,status", ct);
             if (geo is { Status: "success" })
             {
                 cityName = geo.City;
-                var w = await FetchAsync(geo.Lat, geo.Lon);
+                var w = await FetchAsync(geo.Lat, geo.Lon, ct);
                 if (w != null) w.CityName = cityName;
                 return w;
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { /* geolocation failed */ }
 
         // 3. Last resort: manual coordinates
-        return await FetchAsync(fallbackLat, fallbackLon);
+        return await FetchAsync(fallbackLat, fallbackLon, ct);
     }
 
-    public async Task<WeatherData?> FetchAsync(double lat, double lon)
+    public async Task<WeatherData?> FetchAsync(double lat, double lon, CancellationToken ct = default)
     {
         try
         {
             var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true";
-            var response = await _httpClient.GetFromJsonAsync<OpenMeteoResponse>(url);
+            var response = await _httpClient.GetFromJsonAsync<OpenMeteoResponse>(url, ct);
             if (response?.CurrentWeather == null) return null;
 
             var weather = new WeatherData

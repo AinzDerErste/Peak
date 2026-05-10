@@ -77,8 +77,14 @@ public partial class App : Application
                     services.AddSingleton<IslandWindow>();
                     services.AddSingleton<Plugins.IslandHost>();
                     services.AddSingleton<UpdateService>();
-                    services.AddHttpClient("Weather");
-                    services.AddHttpClient("Update");
+                    // Per-client timeouts. Defaults are 100s — far too long for a
+                    // background poller. A hung weather endpoint would otherwise
+                    // hold the dispatcher's awaiter for the full 100s and stack
+                    // up a second tick before the first finished. Update checks
+                    // are user-triggered or background-polled at much longer
+                    // intervals, so a 30s ceiling is generous.
+                    services.AddHttpClient("Weather", c => c.Timeout = TimeSpan.FromSeconds(15));
+                    services.AddHttpClient("Update",  c => c.Timeout = TimeSpan.FromSeconds(30));
                 })
                 .Build();
 

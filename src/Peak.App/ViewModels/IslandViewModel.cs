@@ -45,6 +45,14 @@ public partial class IslandViewModel : ObservableObject
     private readonly Dispatcher _dispatcher;
     private readonly Queue<NotificationData> _notificationQueue = new();
 
+    /// <summary>
+    /// Cancelled in <see cref="Cleanup"/> so any in-flight network call (e.g.
+    /// the weather poller) cooperatively unwinds when the host tears down
+    /// the VM for reload or app shutdown — instead of waiting up to the
+    /// HttpClient's timeout for sockets to close.
+    /// </summary>
+    private readonly CancellationTokenSource _lifetimeCts = new();
+
     [ObservableProperty] private IslandState _currentState = IslandState.Collapsed;
     [ObservableProperty] private string _currentTime = DateTime.Now.ToString("HH:mm");
     [ObservableProperty] private string _currentDate = DateTime.Now.ToString("ddd, dd MMM");
@@ -321,9 +329,15 @@ public partial class IslandViewModel : ObservableObject
             }
         };
 
-        // Weather polling
+        // Weather polling. Tick is wrapped in a fire-and-forget Task with its
+        // own try/catch — DispatcherTimer.Tick is EventHandler so an `async
+        // (_,_) =>` lambda is implicitly async-void. An unhandled exception
+        // there (a hung _dispatcher.Invoke during shutdown, a JSON parse
+        // failure, …) becomes an unobserved task exception and crashes the
+        // process. Routing through SafeRefreshWeatherAsync keeps the timer's
+        // Tick contract synchronous from WPF's perspective.
         _weatherTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
-        _weatherTimer.Tick += async (_, _) => await RefreshWeatherAsync();
+        _weatherTimer.Tick += (_, _) => _ = SafeRefreshWeatherAsync();
 
         // Service events
         _mediaService.MediaChanged += OnMediaChanged;
@@ -1005,7 +1019,8 @@ public partial class IslandViewModel : ObservableObject
     private async Task RefreshWeatherAsync()
     {
         var s = _settingsManager.Settings;
-        var weather = await _weatherService.FetchSmartAsync(s.WeatherPostalCode, s.WeatherCountryCode, s.WeatherLat, s.WeatherLon);
+        var weather = await _weatherService.FetchSmartAsync(
+            s.WeatherPostalCode, s.WeatherCountryCode, s.WeatherLat, s.WeatherLon, _lifetimeCts.Token);
         if (weather != null)
         {
             _dispatcher.Invoke(() =>
@@ -1015,6 +1030,24 @@ public partial class IslandViewModel : ObservableObject
                 WeatherCity = weather.CityName;
                 WeatherIconGeometry = MapWeatherIconToGeometry(weather.Icon);
             });
+        }
+    }
+
+    /// <summary>
+    /// Tick-safe wrapper around <see cref="RefreshWeatherAsync"/>. Catches
+    /// every exception so an async-void Tick (DispatcherTimer's EventHandler
+    /// signature) can't escape an unobserved exception → process crash.
+    /// Cancellation is silent; everything else is logged on Debug.WriteLine
+    /// rather than thrown — failing to refresh weather every 30 min is a
+    /// non-fatal issue we just retry on the next tick.
+    /// </summary>
+    private async Task SafeRefreshWeatherAsync()
+    {
+        try { await RefreshWeatherAsync(); }
+        catch (OperationCanceledException) { /* shutdown — expected */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Weather refresh failed: {ex.Message}");
         }
     }
 
@@ -1321,6 +1354,11 @@ public partial class IslandViewModel : ObservableObject
 
     public void Cleanup()
     {
+        // Cancel first so any in-flight network call (weather poll) starts
+        // unwinding before we tear down the dispatcher / services it might
+        // try to talk to on completion.
+        try { _lifetimeCts.Cancel(); } catch { /* already disposed */ }
+
         _clockTimer.Stop();
         _autoCollapseTimer.Stop();
         _weatherTimer.Stop();
@@ -1345,5 +1383,7 @@ public partial class IslandViewModel : ObservableObject
         _timerService.Dispose();
         _pomodoroService.Dispose();
         _updateService.Stop();
+
+        try { _lifetimeCts.Dispose(); } catch { }
     }
 }

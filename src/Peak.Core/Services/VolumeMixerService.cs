@@ -67,42 +67,50 @@ public class VolumeMixerService : IDisposable
         var newSessions = new List<AudioSession>();
         var seenPids = new HashSet<uint>();
 
-        try
+        // Hold _lock around the SessionManager enumeration so SetVolume /
+        // ToggleMute on the UI thread can't iterate Sessions concurrently
+        // with us — see comment in SetVolume for the COM threading rationale.
+        // We also need _lock for _nameCache (read inside GetSessionName), so
+        // a single lock covers everything.
+        lock (_lock)
         {
-            // Per-app sessions
-            var sessionManager = _device.AudioSessionManager;
-            var sessions = sessionManager.Sessions;
-
-            for (int i = 0; i < sessions.Count; i++)
+            try
             {
-                var session = sessions[i];
-                if (session.State == AudioSessionState.AudioSessionStateExpired)
-                    continue;
+                // Per-app sessions
+                var sessionManager = _device.AudioSessionManager;
+                var sessions = sessionManager.Sessions;
 
-                var name = GetSessionName(session);
-                if (string.IsNullOrEmpty(name)) continue;
-
-                // Skip system services (AudioSrv, etc.)
-                if (name.Contains("AudioSrv", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("%SystemRoot%", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var pid = session.GetProcessID;
-                seenPids.Add(pid);
-
-                newSessions.Add(new AudioSession
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    Id = session.GetSessionIdentifier ?? $"session_{i}",
-                    DisplayName = name,
-                    Volume = session.SimpleAudioVolume.Volume,
-                    IsMuted = session.SimpleAudioVolume.Mute,
-                    ProcessId = pid
-                });
+                    var session = sessions[i];
+                    if (session.State == AudioSessionState.AudioSessionStateExpired)
+                        continue;
+
+                    var name = GetSessionName(session);
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    // Skip system services (AudioSrv, etc.)
+                    if (name.Contains("AudioSrv", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains("%SystemRoot%", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var pid = session.GetProcessID;
+                    seenPids.Add(pid);
+
+                    newSessions.Add(new AudioSession
+                    {
+                        Id = session.GetSessionIdentifier ?? $"session_{i}",
+                        DisplayName = name,
+                        Volume = session.SimpleAudioVolume.Volume,
+                        IsMuted = session.SimpleAudioVolume.Mute,
+                        ProcessId = pid
+                    });
+                }
             }
-        }
-        catch
-        {
-            // Audio subsystem can throw during device changes
+            catch
+            {
+                // Audio subsystem can throw during device changes
+            }
         }
 
         // Build a cheap fingerprint that captures membership + volume/mute
@@ -191,39 +199,55 @@ public class VolumeMixerService : IDisposable
         if (_device == null) return;
         volume = Math.Clamp(volume, 0f, 1f);
 
-        try
+        // NAudio's MMDevice / AudioSessionManager / SessionCollection are
+        // thin RCW wrappers over COM and not documented as thread-safe.
+        // RefreshCore enumerates Sessions on a worker thread; if a user
+        // drags a slider during a refresh the two enumerations alias the
+        // same SessionCollection and Windows' COM marshaller throws
+        // RPC_E_SERVERCALL_RETRYLATER / RPC_E_DISCONNECTED — which our
+        // catch swallows, the slider snaps back, and the user sees a dead
+        // control. Serialise every SessionManager access through _lock so
+        // only one enumeration is in flight at any time.
+        lock (_lock)
         {
-            var sessions = _device.AudioSessionManager.Sessions;
-            for (int i = 0; i < sessions.Count; i++)
+            try
             {
-                if (sessions[i].GetSessionIdentifier == sessionId)
+                var sessions = _device.AudioSessionManager.Sessions;
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    sessions[i].SimpleAudioVolume.Volume = volume;
-                    return;
+                    if (sessions[i].GetSessionIdentifier == sessionId)
+                    {
+                        sessions[i].SimpleAudioVolume.Volume = volume;
+                        return;
+                    }
                 }
             }
+            catch { /* device disappeared mid-call — ignore, next refresh recovers */ }
         }
-        catch { }
     }
 
     public void ToggleMute(string sessionId)
     {
         if (_device == null) return;
 
-        try
+        // See SetVolume above for why _lock wraps the entire enumeration.
+        lock (_lock)
         {
-            var sessions = _device.AudioSessionManager.Sessions;
-            for (int i = 0; i < sessions.Count; i++)
+            try
             {
-                if (sessions[i].GetSessionIdentifier == sessionId)
+                var sessions = _device.AudioSessionManager.Sessions;
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    var vol = sessions[i].SimpleAudioVolume;
-                    vol.Mute = !vol.Mute;
-                    return;
+                    if (sessions[i].GetSessionIdentifier == sessionId)
+                    {
+                        var vol = sessions[i].SimpleAudioVolume;
+                        vol.Mute = !vol.Mute;
+                        return;
+                    }
                 }
             }
+            catch { }
         }
-        catch { }
     }
 
     public void Dispose()

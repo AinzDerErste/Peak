@@ -41,8 +41,23 @@ public class SystemMonitorService : IDisposable
 
     public void Start()
     {
-        _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-        _cpuCounter.NextValue(); // First call always returns 0
+        // PerformanceCounter ctor can throw on systems with a corrupted perf-
+        // counter registry (lodctr /R sometimes needed) or when the calling
+        // user lacks the "Performance Monitor Users" group. Without this
+        // guard the throw bubbles all the way to App.OnStartup → "Startup
+        // failed" message → app refuses to launch. PollAsync already null-
+        // checks _cpuCounter so leaving it null degrades gracefully — CPU
+        // graph reads 0 % but everything else still works.
+        try
+        {
+            _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+            _cpuCounter.NextValue(); // First call always returns 0
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"PerformanceCounter init failed: {ex.Message}");
+            _cpuCounter = null;
+        }
 
         _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
