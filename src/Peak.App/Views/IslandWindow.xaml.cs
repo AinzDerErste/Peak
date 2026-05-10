@@ -466,6 +466,43 @@ public partial class IslandWindow : Window
         if (_viewModel.HasNotification) contentH += 60;
         if (contentH < 40) contentH = 40;
         ExpandedSize = (460, contentH);
+
+        // If we're currently expanded, the IslandBorder.Height was set to
+        // the OLD ExpandedSize when the user expanded — every subsequent
+        // call to this method only updates the math but leaves the visible
+        // pill at its original height. Result: when a slot changes, the
+        // row mode toggles, or IsLiveStream flips while the island is open,
+        // the actual content shrinks but the dark pill keeps its previous
+        // (taller) frame → black empty space below the last widget.
+        // UpdateNotificationBanner already had a private re-animation copy
+        // for the HasNotification case; we now centralise that here so
+        // every UpdateRowVisibility caller benefits.
+        if (_viewModel.CurrentState == IslandState.Expanded)
+            AnimateToExpandedHeight();
+    }
+
+    /// <summary>
+    /// Animates <see cref="IslandBorder.Height"/> to the current
+    /// <see cref="ExpandedSize"/>.<c>H</c>. No-op if the height is already
+    /// within 1 px of the target so we don't burn animation cycles on
+    /// redundant updates. Cancels any running height animation first to
+    /// avoid stacking on rapid layout-affecting changes (e.g. media-track
+    /// flips that change IsLiveStream within the same second).
+    /// </summary>
+    private void AnimateToExpandedHeight()
+    {
+        var targetH = ExpandedSize.H;
+        if (Math.Abs(IslandBorder.Height - targetH) <= 1) return;
+
+        _currentH = targetH;
+        IslandBorder.BeginAnimation(HeightProperty, null);
+        var heightAnim = new DoubleAnimation(targetH, new Duration(TimeSpan.FromMilliseconds(200)))
+        {
+            EasingFunction = AnimEase,
+            FillBehavior = FillBehavior.Stop
+        };
+        heightAnim.Completed += (_, _) => IslandBorder.Height = targetH;
+        IslandBorder.BeginAnimation(HeightProperty, heightAnim);
     }
 
     private static int GetWidgetHeight(WidgetType type) => type switch
@@ -603,25 +640,12 @@ public partial class IslandWindow : Window
     {
         NotificationBanner.Visibility = _viewModel.HasNotification ? Visibility.Visible : Visibility.Collapsed;
 
-        // Recalculate expanded height if currently expanded
+        // UpdateRowVisibility re-runs the size math AND now also re-animates
+        // the height when expanded — so the previous private animate-block
+        // here is redundant. Keeping the call ordering explicit because the
+        // notification banner contributes to the height calculation.
         if (_viewModel.CurrentState == IslandState.Expanded)
-        {
             UpdateRowVisibility();
-            // Re-animate to new height
-            var (targetW, targetH) = ExpandedSize;
-            if (Math.Abs(IslandBorder.Height - targetH) > 1)
-            {
-                _currentH = targetH;
-                IslandBorder.BeginAnimation(HeightProperty, null);
-                var heightAnim = new DoubleAnimation(targetH, new Duration(TimeSpan.FromMilliseconds(200)))
-                {
-                    EasingFunction = AnimEase,
-                    FillBehavior = FillBehavior.Stop
-                };
-                heightAnim.Completed += (_, _) => IslandBorder.Height = targetH;
-                IslandBorder.BeginAnimation(HeightProperty, heightAnim);
-            }
-        }
     }
 
     private void OnPeekLeftClick(object sender, MouseButtonEventArgs e)

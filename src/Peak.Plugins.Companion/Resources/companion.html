@@ -86,7 +86,15 @@
     transform-origin: center;
   }
 
-  .heart { opacity: 0; }
+  /* Heart starts hidden; love-mood reveals it with the classic
+     two-step "thump-thump" animation defined further down.
+     filter: drop-shadow gives a soft pink halo so the heart pops
+     against the dark island background — the previous flat fill
+     looked washed-out, especially the peach colour. */
+  .heart {
+    opacity: 0;
+    filter: drop-shadow(0 0 4px rgba(255, 90, 130, 0.55));
+  }
 
   /* ===== MOOD STATES =====
      Pure CSS transforms on the .base-rect. No path morphing required. */
@@ -126,12 +134,18 @@
   }
   [data-mood="love"] .heart {
     opacity: 1;
-    animation: companion-heartbeat 1.1s ease-in-out infinite;
+    /* Classic "thump-thump" — quick double-beat, brief pause, repeat.
+       Two scale spikes inside one cycle reads as a heartbeat to the eye
+       in a way the previous single-pulse animation didn't. */
+    animation: companion-heartbeat 1.2s ease-in-out infinite;
   }
   @keyframes companion-heartbeat {
-    0%, 60%, 100% { transform: scale(1); }
-    20%           { transform: scale(1.18); }
-    40%           { transform: scale(0.95); }
+    0%   { transform: scale(1); }
+    14%  { transform: scale(1.22); }
+    28%  { transform: scale(1); }
+    42%  { transform: scale(1.18); }
+    56%  { transform: scale(0.96); }
+    100% { transform: scale(1); }
   }
 
   [data-mood="wink"] .eye-left .base-rect {
@@ -152,27 +166,48 @@
        viewBox="0 0 400 200"
        xmlns="http://www.w3.org/2000/svg"
        preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <!-- Heart fill gradient — slightly lighter top-right to darker
+           bottom-left gives the heart a subtle 3D feel. Pure flat fill
+           reads as a 2D sticker; the gradient looks closer to a glossy
+           emoji heart without going overboard on rendering cost. -->
+      <linearGradient id="heart-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%"   stop-color="var(--companion-heart-color, #FF5A82)" />
+        <stop offset="100%" stop-color="var(--companion-heart-deep, #E03060)" />
+      </linearGradient>
+    </defs>
     <g class="eyes-container" id="companion-eyes">
       <!-- Each eye is a translate group containing its rect + heart paths.
            Mouse-tracking sets transform on the <g>; mood transforms hit the
-           inner .eye-shape elements via CSS. The two stacks compose cleanly. -->
+           inner .eye-shape elements via CSS. The two stacks compose cleanly.
+
+           Heart path: classic symmetric heart, centred on (0,0), sized
+           ~44 wide × 40 tall to fit visually inside the eye-rect's
+           ~56×84 footprint without dominating it. Replaces the previous
+           irregular curve that read as "lumpy" at small render sizes. -->
       <g class="eye eye-left" id="companion-eye-left" transform="translate(140 100)">
         <rect class="eye-shape base-rect"
               x="-28" y="-42" width="56" height="84" rx="22"
               fill="var(--companion-eye-color, #F5F7FA)" />
         <path class="eye-shape heart"
-              d="M 0 32 C -28 14 -34 -12 -22 -24 C -12 -32 -4 -24 0 -14
-                 C 4 -24 12 -32 22 -24 C 34 -12 28 14 0 32 Z"
-              fill="var(--companion-heart-color, #F0997B)" />
+              d="M 0 22
+                 C -6 14, -22 4, -22 -10
+                 C -22 -22, -10 -22, 0 -10
+                 C 10 -22, 22 -22, 22 -10
+                 C 22 4, 6 14, 0 22 Z"
+              fill="url(#heart-grad)" />
       </g>
       <g class="eye eye-right" id="companion-eye-right" transform="translate(260 100)">
         <rect class="eye-shape base-rect"
               x="-28" y="-42" width="56" height="84" rx="22"
               fill="var(--companion-eye-color, #F5F7FA)" />
         <path class="eye-shape heart"
-              d="M 0 32 C -28 14 -34 -12 -22 -24 C -12 -32 -4 -24 0 -14
-                 C 4 -24 12 -32 22 -24 C 34 -12 28 14 0 32 Z"
-              fill="var(--companion-heart-color, #F0997B)" />
+              d="M 0 22
+                 C -6 14, -22 4, -22 -10
+                 C -22 -22, -10 -22, 0 -10
+                 C 10 -22, 22 -22, 22 -10
+                 C 22 4, 6 14, 0 22 Z"
+              fill="url(#heart-grad)" />
       </g>
     </g>
   </svg>
@@ -191,7 +226,12 @@
     screenBackground: '#000',
     screenRadius: '0',
     eyeColor: '#F5F7FA',        // off-white avoids harsh flicker on pure black
-    heartColor: '#F0997B',
+    // Heart fill — top-right (lighter) and bottom-left (deeper) of the
+    // gradient. Previous flat peach (#F0997B) read as washed-out; the
+    // pink→rose pair below is closer to a glossy emoji heart against the
+    // dark island background.
+    heartColor: '#FF5A82',
+    heartColorDeep: '#E03060',
     glow: {
       innerBlur: '2px',
       innerColor: 'rgba(255,255,255,0.95)',
@@ -263,6 +303,7 @@
     screen.style.setProperty('--companion-radius', CONFIG.screenRadius);
     screen.style.setProperty('--companion-eye-color', CONFIG.eyeColor);
     screen.style.setProperty('--companion-heart-color', CONFIG.heartColor);
+    screen.style.setProperty('--companion-heart-deep', CONFIG.heartColorDeep);
     screen.style.setProperty('--companion-glow-inner-blur',  CONFIG.glow.innerBlur);
     screen.style.setProperty('--companion-glow-inner-color', CONFIG.glow.innerColor);
     screen.style.setProperty('--companion-glow-outer-blur',  CONFIG.glow.outerBlur);

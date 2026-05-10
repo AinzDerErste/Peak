@@ -4,6 +4,16 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.10.8] — 2026-05
+
+### Fixed
+- **Expanded state — black empty space at the bottom after layout changes.** `UpdateRowVisibility` recomputed `ExpandedSize` whenever a slot changed, a row toggled wide/two-slot, a livestream started, or a notification cleared — but only the notification-banner path actually re-animated `IslandBorder.Height` to the new size. Every other trigger left the dark pill at its previous (taller) frame, so the user saw a black gap below the last widget. The animate-to-new-height block is now factored out and called from `UpdateRowVisibility` itself whenever the island is currently expanded.
+
+### Changed
+- **Companion `love` mood — proper hearts.** Replaced the flat peach (`#F0997B`) fill with a vibrant pink→rose linear gradient (`#FF5A82` → `#E03060`) that reads as a glossy emoji heart against the dark island. Added a soft pink `drop-shadow` halo so the hearts pop. Heart path simplified to a symmetric, classically-iconic curve. Animation upgraded to a two-step "thump-thump" beat (was a single pulse) for a more recognisable heartbeat feel. Customisable via `COMPANION_CONFIG.heartColor` / `heartColorDeep` if a user wants different shades in their `companion.html` override.
+
+---
+
 ## [1.10.7] — 2026-05
 
 Hardening pass — second-round audit looked specifically for resource lifecycle, thread safety, and async robustness issues outside the dispatcher/perf scope of 1.10.2.
