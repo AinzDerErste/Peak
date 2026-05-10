@@ -6,16 +6,22 @@ A macOS/iOS-style Dynamic Island for Windows, built as a hobby project.
 
 ## Features
 
-- **Dynamic Island** — collapsible notch at the top of your screen with Collapsed, Peek, and Expanded states
+- **Dynamic Island** — collapsible notch at the top of your screen with Collapsed, Peek, Expanded, and Spotlight (search) states
 - **Widgets** — Clock, Weather, Media Controls, System Monitor, Network Stats, Calendar, Timer, Quick Access, Clipboard, Quick Notes, Volume Mixer, Pomodoro
 - **Configurable Collapsed State** — 3 slots (Left, Center, Right) with selectable widgets
 - **Audio Visualizer** — real-time music visualization as a separate circle next to the notch
+- **Spotlight Search** — Ctrl+Alt+S overlay with app launch, web fallbacks, and instant access to Quick Notes / Clipboard
+- **Themes** — seven built-in themes plus user-supplied JSON themes (`%AppData%\Peak\themes\`); see [Theme Development](#theme-development) below
+- **Categorised Settings** — General, Appearance, Widgets, Apps, Plugins tabs so the Settings window scales as features grow
 - **Windows Notifications** — toast notifications peek through the island
 - **Plugin System** — drop a plugin DLL into `%AppData%\Peak\plugins\<name>\` to extend the island with new widgets and integrations
   - **Discord** — shows voice-channel participants and highlights the active speaker
   - **TeamSpeak** — shows TeamSpeak voice-channel participants and the active speaker
+  - **Companion** — animated WebView2 face in the expanded header that reacts to your activity (music, Pomodoro, late-night, calls, high CPU, …); fully customisable via a tiny declarative rules DSL with hot-reload, plus an in-app editor for the rules and the HTML
 - **Auto-Update** — checks GitHub Releases for new versions
 - **Installer** — Inno Setup based installer with autostart support
+
+> **Stability note**: the v1.10.x patch series (May 2026) was a focused stabilisation pass — race conditions in the SMTC media integration, dispatcher-thread offloading for performance, plus a hardening pass on resource lifecycle and thread safety across all services. See [`CHANGELOG.md`](CHANGELOG.md) for the per-release breakdown.
 
 ## Tech Stack
 
@@ -229,6 +235,72 @@ public class HelloPlugin : IWidgetPlugin, IPluginSettingsProvider
 
 For richer settings (lists, multi-step pickers, image selection), expose a `Button` field that opens a custom `Window` you build in code — see the **TeamSpeak AFK picker** (`src/Peak.Plugins.TeamSpeak/AfkChannelsDialog.xaml.cs`) for a worked example that side-steps the BAML-loading issue described in the Caveats.
 
+The `Button` field kind is also the canonical way to expose escape hatches for things that don't fit into Text/Number/Bool/Password — open a folder, reset a config file, launch an in-app editor. Three useful patterns:
+
+```csharp
+public IReadOnlyList<PluginSettingField> GetSettingsSchema() => new[]
+{
+    // Open the plugin's data folder in Explorer — useful for inspecting
+    // logs or letting the user back up plugin files manually.
+    new PluginSettingField
+    {
+        Key = "OpenDataFolder",
+        Label = "Open plugin folder",
+        Description = "Opens %AppData%\\Peak\\plugins\\hello in Explorer.",
+        Kind = PluginSettingFieldKind.Button
+    },
+    // In-app editor for a config file the plugin reads. The editor itself
+    // is just a code-built Window with a TextBox + Save button. See
+    // src/Peak.Plugins.Companion/MoodEditorWindow.cs for the full pattern.
+    new PluginSettingField
+    {
+        Key = "EditConfig",
+        Label = "Edit config…",
+        Description = "Opens the rules file in an in-app editor with JSON validation.",
+        Kind = PluginSettingFieldKind.Button
+    },
+    // Reset to defaults. Wire it to your config-reset routine.
+    new PluginSettingField
+    {
+        Key = "ResetConfig",
+        Label = "Reset to defaults",
+        Kind = PluginSettingFieldKind.Button
+    }
+};
+
+public void SetSettingValue(string key, string? value)
+{
+    switch (key)
+    {
+        case "OpenDataFolder":
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = _dataDir,    // %AppData%\Peak\plugins\hello\
+                    UseShellExecute = true,
+                    Verb = "open"
+                });
+            }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Open folder failed"); }
+            break;
+        case "EditConfig":
+            // Open a code-built Window, modal, owner = active host window:
+            _host?.UiDispatcher.Invoke(() => new MyEditorWindow(_configPath)
+            {
+                Owner = FindActiveHostWindow()
+            }.ShowDialog());
+            break;
+        case "ResetConfig":
+            File.WriteAllText(_configPath, JsonSerializer.Serialize(DefaultConfig()));
+            // … plus reload your in-memory state from the new file
+            break;
+    }
+}
+```
+
+The **Companion plugin** (`src/Peak.Plugins.Companion/`) is the most thorough example of this pattern: it ships a code-built `MoodEditorWindow` with monospace gutter + line numbers + JSON validation, plus a `FileSystemWatcher` that hot-reloads the running engine when the file is saved from any editor. Worth reading if you want users to be able to customise your plugin's behaviour without recompiling.
+
 #### `IIslandHost` (the API back to Peak)
 
 The interface your plugin holds onto from `AttachToIsland`. Full reference:
@@ -244,6 +316,7 @@ The interface your plugin holds onto from `AttachToIsland`. Full reference:
 | `RequestSettingsSave()` | Ask Peak to collect all plugin settings and write them to disk. | After an OAuth token refresh, after a custom dialog mutates state. |
 | `SetExpansionBlocked(bool)` | Prevent / allow the user from expanding the island via hover/click. | While showing a full-pill overlay. |
 | `SetCollapsedOverlay(UIElement?)` | Stretch a custom element across the full collapsed pill, hiding the slot widgets. `null` removes the overlay. | Incoming call notification, "Press X to confirm" prompts. |
+| `SetExpandedHeaderContent(UIElement?)` | Drop a small UI fragment into the expanded header overlay between the Clock (slot 0) and Weather (slot 1) columns — spans both slots without resizing them. `null` clears it and restores the normal header layout. | Companion plugin uses this for its animated face. The host hides the overlay during state-transition animations and the Hidden state, so airspace controls (WebView2) don't paint stale content. |
 
 ### 5. Settings persistence
 
@@ -402,6 +475,49 @@ private async Task PollLoop(CancellationToken ct)
 - **Plugins can't reference `Peak.Core` or `Peak.App`.** Anything you need from the host travels through `IIslandHost`. If you find yourself wanting access to an internal type, that's a signal the SDK should grow a method — open an issue.
 - **State changes during transitions.** Peak may call `OnActivate` / `OnDeactivate` rapidly while the user reshuffles slots. Don't assume `OnActivate` ⇒ `OnDeactivate` happen in pairs without other lifecycle events between them — keep activation logic idempotent.
 - **The host doesn't sandbox plugins.** Plugin code runs with full host privileges (file system, network, COM). Vet anything you load.
+
+### 10. Showcase: the Companion plugin
+
+The bundled **Companion** plugin (`src/Peak.Plugins.Companion/`) is intentionally the most ambitious shipped example because it exercises every advanced surface area of the SDK at once. If you're building something non-trivial, read it.
+
+**What it is.** An animated WebView2 face in the expanded header — pair of eyes that blink, follow CSS-state moods (happy / sad / angry / surprised / suspicious / sleepy / love / wink / idle), and react to your activity. Sits between the Clock (slot 0) and Weather (slot 1) columns in the expanded view via `IIslandHost.SetExpandedHeaderContent`.
+
+**What it demonstrates.**
+
+| Feature | File | Why it's interesting |
+|---------|------|----------------------|
+| Hosting WebView2 in a plugin | `CompanionPlugin.cs` | Native deps (WebView2 managed assemblies + native runtime loaders + `.deps.json`) need to ship inside the plugin folder; the csproj copies them via an `AfterTargets="Build"` target. |
+| Reflection-driven VM subscription | `MoodEngine.cs` | Plugins can't reference the host's `IslandViewModel` type, but they can listen on `INotifyPropertyChanged` and read public properties by name. The engine subscribes once and reflects per-update. |
+| Declarative rules + DSL | `MoodExpression.cs`, `MoodRules.cs` | Mood logic lives in a `moods.json` file, not in C#. A small recursive-descent parser supports `&& \|\| ! == != > < >= <=`, parens, numbers, bool/string literals. Synthetic vars (`Hour`, `Minute`, `Second`) plus any `IslandViewModel` property name. |
+| Hot-reload via `FileSystemWatcher` | `CompanionPlugin.OnMoodsFileChanged` | Saving `moods.json` from any editor (or the in-app editor) reloads the rule set into the running engine within ~150 ms — no plugin reload, no restart. |
+| In-app editor with JSON validation | `MoodEditorWindow.cs` | Code-built WPF Window (no XAML, dodges the BAML/ALC pitfall) with a monospace text area, a synced line-number gutter, Ctrl+S to save, and `JsonDocument.Parse` validation that blocks invalid saves. Exposed via two `PluginSettingFieldKind.Button` fields. |
+| Optional file-based override | `CompanionPlugin.LoadCompanionHtml` | If the user drops `companion.html` into the plugin's data folder, that file replaces the embedded default — visual customisation (eyes shape, mood CSS, animations) without recompiling. |
+| Race-safe state across UI/worker threads | `MoodEngine`, `MoodEditorWindow` | The engine evaluates rules on the dispatcher; the watcher fires reload on a worker thread; saves go through a UI-thread modal dialog. All shared state passes through the dispatcher correctly without obvious locks because each thread owns a coherent slice. |
+
+**The DSL in 30 seconds.** `moods.json` is an ordered list of rules; first match wins:
+
+```json
+{
+  "Moods": [
+    { "Mood": "surprised",  "When": "HasNotification",                                "Duration": 3,  "Priority": 100 },
+    { "Mood": "angry",      "When": "CpuUsage > 90",                                  "Sustained": 3, "Priority": 90  },
+    { "Mood": "love",       "When": "DiscordCallCount > 0 || TeamSpeakCallCount > 0",                 "Priority": 70  },
+    { "Mood": "suspicious", "When": "IsPomodoroRunning",                                              "Priority": 60  },
+    { "Mood": "happy",      "When": "HasMedia && IsPlaying",                                          "Priority": 50  },
+    { "Mood": "sleepy",     "When": "Hour >= 22 || Hour < 6",                                         "Priority": 30  }
+  ],
+  "Fallback": "idle"
+}
+```
+
+`Sustained` debounces a noisy signal (CPU has to stay above 90 % for *N* seconds before the rule activates). `Duration` latches an edge event (a notification triggers `surprised` for 3 s even if `HasNotification` flips back to false right after). They're mutually exclusive per rule.
+
+**Lessons that apply to any plugin you might write:**
+
+1. **Ship a little, expose a lot.** Companion's C# is ~1000 lines. The behaviour is mostly in the JSON + HTML, both user-editable. This means users can do things you didn't anticipate without filing issues.
+2. **Code-build Windows.** XAML-loaded `Window`s break in plugin ALCs (see Pitfalls §9). The Editor and any other dialogs are 100 % programmatic.
+3. **Per-plugin `plugin.log` is invaluable.** When a user reports "the eyes don't show up", the log tells you exactly which lifecycle hook didn't run. Companion writes one to `%AppData%\Peak\plugins\companion\plugin.log` on every step.
+4. **`SetExpandedHeaderContent` makes the SDK feel native.** If your plugin has a "primary visual", consider whether it should live in the expanded header overlay rather than as a slot-bound widget — it's a much stronger statement of presence.
 
 ## Theme Development
 
