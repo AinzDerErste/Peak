@@ -18,9 +18,12 @@
                         </Border.Background>
                     </Border>
                     <!-- LIVE overlay badge — centered on the bottom edge of the
-                         artwork, hanging ~4px below it for a ribbon look. -->
+                         artwork. Negative bottom margin makes the ribbon hang
+                         outside the cover; -7 leaves a small gap to where the
+                         row's controls start, so the badge reads as its own
+                         "tag" rather than crowding the album-art frame. -->
                     <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                            Margin="0,0,0,-4"
+                            Margin="0,0,0,-7"
                             Background="#FFE74C3C" CornerRadius="3" Padding="4,1"
                             Visibility="{Binding IsLiveStream, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Orientation="Horizontal">
