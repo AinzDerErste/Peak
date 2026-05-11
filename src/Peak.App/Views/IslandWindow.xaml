@@ -126,7 +126,7 @@
 
     </Window.Resources>
 
-    <Grid UseLayoutRounding="True" SnapsToDevicePixels="True"
+    <Grid x:Name="RootLayoutGrid" UseLayoutRounding="True" SnapsToDevicePixels="True"
           TextOptions.TextFormattingMode="Display">
 
         <!-- Island + banner stack. Putting IslandBorder and the optional

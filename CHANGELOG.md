@@ -4,6 +4,13 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.11.2] — 2026-05
+
+### Fixed
+- **Startup crash** introduced by v1.11.1 — wrapping the IslandBorder + new banner host in a vertical StackPanel changed `IslandBorder.Parent`'s runtime type from `Grid` to `StackPanel`, but `PositionVisualizerCircle` cast that parent unconditionally to `Grid` to read its ActualWidth → `InvalidCastException` the first time the visualizer was repositioned (which happens on the very first `IslandBorder.SizeChanged` event after launch). The root Grid now has an `x:Name="RootLayoutGrid"` and the positioning code references it directly instead of walking up via `.Parent` — robust against future layout changes too.
+
+---
+
 ## [1.11.1] — 2026-05
 
 ### Added — Plugin SDK

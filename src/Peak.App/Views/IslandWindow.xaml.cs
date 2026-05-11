@@ -1143,7 +1143,13 @@ public partial class IslandWindow : Window
         // (0,0,0,0 — the far-left edge of the window) when audio kicked in
         // mid-state-transition.
         var pillW = IslandBorder.ActualWidth;
-        var gridW = ((Grid)IslandBorder.Parent).ActualWidth;
+        // Was: cast IslandBorder.Parent to Grid. After v1.11.1 IslandBorder
+        // lives inside a vertical StackPanel (so the new IslandBannerHost
+        // can sit beneath it without manual Margin math) — so its direct
+        // parent isn't the outer Grid anymore. The named RootLayoutGrid
+        // explicitly references the root container regardless of how
+        // descendants are arranged.
+        var gridW = RootLayoutGrid.ActualWidth;
         if (pillW <= 0 || gridW <= 0)
         {
             // Layout not ready (window briefly hidden, mid-animation) — retry
