@@ -176,6 +176,38 @@ public partial class IslandViewModel : ObservableObject
     // Volume Mixer
     public ObservableCollection<AudioSession> AudioSessions { get; } = new();
 
+    // Plugin-contributed action buttons for the MediaWidget. Bound by the
+    // widget's controls row; renders a horizontal stack of icon buttons
+    // next to play/pause/skip. Mutated only via SetPluginMediaActions on
+    // the UI thread.
+    public ObservableCollection<Peak.Plugin.Sdk.MediaAction> MediaActions { get; } = new();
+    private readonly Dictionary<string, IReadOnlyList<Peak.Plugin.Sdk.MediaAction>> _pluginMediaActions = new();
+
+    /// <summary>
+    /// Replace the registered media-action buttons for a single plugin.
+    /// Other plugins' actions are preserved. Pass null or an empty list
+    /// to clear a plugin's contribution.
+    ///
+    /// Called from <c>IslandHost.SetMediaActions</c>; the host already
+    /// dispatches to the UI thread, so we don't double-dispatch here.
+    /// Rebuilds the flat <see cref="MediaActions"/> collection in
+    /// registration order so the row of buttons is deterministic.
+    /// </summary>
+    public void SetPluginMediaActions(string pluginId, IReadOnlyList<Peak.Plugin.Sdk.MediaAction>? actions)
+    {
+        if (string.IsNullOrEmpty(pluginId)) return;
+
+        if (actions == null || actions.Count == 0)
+            _pluginMediaActions.Remove(pluginId);
+        else
+            _pluginMediaActions[pluginId] = actions;
+
+        MediaActions.Clear();
+        foreach (var kv in _pluginMediaActions)
+            foreach (var a in kv.Value)
+                MediaActions.Add(a);
+    }
+
     // Spotlight Search
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSearchResults))]

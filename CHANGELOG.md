@@ -4,6 +4,23 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.11.0] — 2026-05
+
+### Added — Plugin SDK extensions
+
+Three generic SDK additions, all motivated by the third-party MediaDownload plugin but useful to any plugin author. Shipped Discord / TeamSpeak / Companion plugins keep working unchanged because each addition is opt-in.
+
+- **`IIslandHost.SetMediaActions(pluginId, actions)`** — plugins can contribute icon buttons next to play/pause/skip in the MediaWidget. Each `MediaAction` carries an SVG `IconPathData`, a `Tooltip`, and an `OnClick` callback. The host renders them in a horizontal stack right after the built-in controls; multiple plugins concatenate in registration order. Passing `null` removes a plugin's actions on detach.
+- **`PluginSettingFieldKind.Choice`** — dropdown rendered as a ComboBox, populated from `PluginSettingField.Options` (a list of `(Value, Label)` pairs). The stored value matches one of the option values; the label is what the user sees in the dropdown.
+- **`PluginSettingFieldKind.FilePath` / `FolderPath`** — text-input field with a **Browse…** button next to it. `FilePath` opens an `OpenFileDialog` filtered by `PluginSettingField.FileFilter` (e.g. `"Executables|*.exe"`); `FolderPath` opens an `OpenFolderDialog`. Stored value stays a string path — only the editing UX changes.
+
+### Internal
+
+- `PluginSettingFieldDto` extended with `Options` and `FileFilter` to carry the new metadata across the ALC boundary. PluginLoader's reflection-based projection pulls the new properties from any plugin that supplies them; older plugins continue to work because both new fields are nullable.
+- `SettingsWindow.LoadPluginsList` refactored: the save-time `_pluginFieldBoxes` list now stores `Func<string>` value-getters instead of concrete `TextBox` references, so future control types can plug in without touching the save loop. The TextBox styling block extracted to a `MakeFieldTextBox` helper to keep multi-control rows (path + Browse) DRY.
+
+---
+
 ## [1.10.8] — 2026-05
 
 ### Fixed

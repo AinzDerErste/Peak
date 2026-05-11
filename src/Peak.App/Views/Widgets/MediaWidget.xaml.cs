@@ -88,4 +88,20 @@ public partial class MediaWidget : UserControl
         };
         ProgressFill.BeginAnimation(WidthProperty, anim);
     }
+
+    /// <summary>
+    /// Click handler for plugin-contributed action buttons. The button's
+    /// Tag holds the originating <see cref="Peak.Plugin.Sdk.MediaAction"/>;
+    /// invoking <c>OnClick</c> on the UI thread is the contract — plugins
+    /// kick off background work themselves if their action is heavy.
+    /// </summary>
+    private void OnMediaActionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        if (btn.Tag is not Peak.Plugin.Sdk.MediaAction action) return;
+        try { action.OnClick?.Invoke(); }
+        catch { /* plugin's exception, not ours — swallow so one bad
+                   plugin doesn't take the host down. The plugin's own
+                   logger / log file should record what went wrong. */ }
+    }
 }

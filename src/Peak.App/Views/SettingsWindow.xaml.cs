@@ -30,7 +30,14 @@ public partial class SettingsWindow : Window
     private string _recordedSpotlightHotkeyDisplay = "";
 
     // Plugin settings edit state: (pluginId, fieldKey) → TextBox
-    private readonly List<(string PluginId, string Key, TextBox Box)> _pluginFieldBoxes = new();
+    /// <summary>
+    /// Save-time bridge between rendered field controls and the plugin's
+    /// <c>SetSettingValue</c>. Each entry is a (pluginId, key, get-current-value)
+    /// triple — using a Func instead of a concrete TextBox lets ComboBox /
+    /// folder-pickers / future control types plug in without churning the
+    /// save loop. Cleared on every <see cref="LoadPluginsList"/> call.
+    /// </summary>
+    private readonly List<(string PluginId, string Key, Func<string> GetValue)> _pluginFieldBoxes = new();
 
     // Plugin enable/disable state: pluginId → CheckBox (true = enabled)
     private readonly Dictionary<string, CheckBox> _pluginEnabledChecks = new();
@@ -273,44 +280,118 @@ public partial class SettingsWindow : Window
                     };
                     cardStack.Children.Add(fieldLabel);
 
+                    // ─── Choice (5) — ComboBox populated from field.Options ──
+                    if (field.Kind == 5 && field.Options is { Count: > 0 } options)
+                    {
+                        var combo = new ComboBox
+                        {
+                            FontSize = 13,
+                            Padding = new Thickness(8, 6, 8, 6),
+                            Margin = new Thickness(0, 0, 0, 2),
+                            Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)),
+                            Foreground = Brushes.White,
+                            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                            BorderThickness = new Thickness(1)
+                        };
+                        foreach (var opt in options)
+                            combo.Items.Add(new ComboBoxItem
+                            {
+                                Content = opt.Label,
+                                Tag = opt.Value,
+                                Foreground = Brushes.Black     // dropdown popup is light by default
+                            });
+                        // Pre-select the matching item by stored Value.
+                        for (int i = 0; i < combo.Items.Count; i++)
+                        {
+                            if (combo.Items[i] is ComboBoxItem cbi && (cbi.Tag as string) == field.CurrentValue)
+                            {
+                                combo.SelectedIndex = i;
+                                break;
+                            }
+                        }
+                        if (combo.SelectedIndex < 0 && combo.Items.Count > 0) combo.SelectedIndex = 0;
+
+                        cardStack.Children.Add(combo);
+                        _pluginFieldBoxes.Add((schema.PluginId, field.Key,
+                            () => (combo.SelectedItem as ComboBoxItem)?.Tag as string ?? ""));
+                        AddDescription(cardStack, field.Description, subLabelStyle);
+                        continue;
+                    }
+
+                    // ─── FilePath (6) / FolderPath (7) — TextBox + Browse ────
+                    if (field.Kind == 6 || field.Kind == 7)
+                    {
+                        var pathBox = MakeFieldTextBox(field.CurrentValue ?? "");
+                        var browseBtn = new Button
+                        {
+                            Content = "Browse…",
+                            Style = (Style)FindResource("SubtleButton"),
+                            Padding = new Thickness(12, 6, 12, 6),
+                            Margin = new Thickness(6, 0, 0, 2),
+                            VerticalAlignment = VerticalAlignment.Center
+                        };
+                        var isFolder = field.Kind == 7;
+                        var fileFilter = field.FileFilter;
+                        browseBtn.Click += (_, _) =>
+                        {
+                            if (isFolder)
+                            {
+                                var dlg = new Microsoft.Win32.OpenFolderDialog
+                                {
+                                    Title = $"Select folder for {field.Label}",
+                                    InitialDirectory = string.IsNullOrWhiteSpace(pathBox.Text) ? null : pathBox.Text
+                                };
+                                if (dlg.ShowDialog(this) == true) pathBox.Text = dlg.FolderName;
+                            }
+                            else
+                            {
+                                var dlg = new Microsoft.Win32.OpenFileDialog
+                                {
+                                    Title = $"Select file for {field.Label}",
+                                    Filter = string.IsNullOrWhiteSpace(fileFilter)
+                                        ? "All files|*.*"
+                                        : fileFilter + "|All files|*.*",
+                                    CheckFileExists = true
+                                };
+                                if (!string.IsNullOrWhiteSpace(pathBox.Text))
+                                {
+                                    try
+                                    {
+                                        var dir = System.IO.Path.GetDirectoryName(pathBox.Text);
+                                        if (!string.IsNullOrEmpty(dir)) dlg.InitialDirectory = dir;
+                                    }
+                                    catch { /* invalid path — let dialog default */ }
+                                }
+                                if (dlg.ShowDialog(this) == true) pathBox.Text = dlg.FileName;
+                            }
+                        };
+
+                        var row = new DockPanel { LastChildFill = true };
+                        DockPanel.SetDock(browseBtn, Dock.Right);
+                        row.Children.Add(browseBtn);
+                        row.Children.Add(pathBox);
+                        cardStack.Children.Add(row);
+                        _pluginFieldBoxes.Add((schema.PluginId, field.Key, () => pathBox.Text));
+                        AddDescription(cardStack, field.Description, subLabelStyle);
+                        continue;
+                    }
+
+                    // ─── Default: Text / Password / Number / Bool render as TextBox ──
                     TextBox box;
                     if (field.Kind == 1) // Password
                     {
-                        box = new TextBox
-                        {
-                            FontFamily = new FontFamily("Consolas"),
-                            Text = field.CurrentValue ?? "",
-                            Tag = "password"
-                        };
+                        box = MakeFieldTextBox(field.CurrentValue ?? "");
+                        box.FontFamily = new FontFamily("Consolas");
+                        box.Tag = "password";
                     }
                     else
                     {
-                        box = new TextBox { Text = field.CurrentValue ?? "" };
+                        box = MakeFieldTextBox(field.CurrentValue ?? "");
                     }
-
-                    box.FontSize = 13;
-                    box.Padding = new Thickness(8, 6, 8, 6);
-                    box.Margin = new Thickness(0, 0, 0, 2);
-                    box.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
-                    box.Foreground = Brushes.White;
-                    box.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
-                    box.BorderThickness = new Thickness(1);
-                    box.CaretBrush = Brushes.White;
 
                     cardStack.Children.Add(box);
-                    _pluginFieldBoxes.Add((schema.PluginId, field.Key, box));
-
-                    if (!string.IsNullOrWhiteSpace(field.Description))
-                    {
-                        var desc = new TextBlock
-                        {
-                            Text = field.Description,
-                            Style = subLabelStyle,
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin = new Thickness(0, 2, 0, 0)
-                        };
-                        cardStack.Children.Add(desc);
-                    }
+                    _pluginFieldBoxes.Add((schema.PluginId, field.Key, () => box.Text));
+                    AddDescription(cardStack, field.Description, subLabelStyle);
                 }
             }
             else if (!isEnabled)
@@ -328,6 +409,37 @@ public partial class SettingsWindow : Window
             card.Child = cardStack;
             PluginList.Children.Add(card);
         }
+    }
+
+    /// <summary>
+    /// Standard TextBox styling shared by Text / Password / Number / FilePath
+    /// fields in the plugin settings cards. Extracted so the multi-control
+    /// rows (FilePath + Browse, etc.) don't duplicate the styling block.
+    /// </summary>
+    private static TextBox MakeFieldTextBox(string text) => new()
+    {
+        Text = text,
+        FontSize = 13,
+        Padding = new Thickness(8, 6, 8, 6),
+        Margin = new Thickness(0, 0, 0, 2),
+        Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)),
+        Foreground = Brushes.White,
+        BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+        BorderThickness = new Thickness(1),
+        CaretBrush = Brushes.White
+    };
+
+    /// <summary>Append a description sub-label to a settings card if one was supplied.</summary>
+    private static void AddDescription(StackPanel cardStack, string? description, Style subLabelStyle)
+    {
+        if (string.IsNullOrWhiteSpace(description)) return;
+        cardStack.Children.Add(new TextBlock
+        {
+            Text = description,
+            Style = subLabelStyle,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 0)
+        });
     }
 
     private void LoadNotificationApps(AppSettings s)
@@ -602,8 +714,8 @@ public partial class SettingsWindow : Window
         var loader = ((App)Application.Current).PluginLoader;
         if (loader != null && _pluginFieldBoxes.Count > 0)
         {
-            foreach (var (pluginId, key, box) in _pluginFieldBoxes)
-                loader.SetPluginSetting(pluginId, key, box.Text);
+            foreach (var (pluginId, key, getValue) in _pluginFieldBoxes)
+                loader.SetPluginSetting(pluginId, key, getValue());
 
             var collected = loader.CollectAllSettings();
             // Merge (overwrite) rather than replace — keeps entries from plugins

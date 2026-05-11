@@ -192,7 +192,18 @@ public class HelloPlugin : IWidgetPlugin, IIslandIntegrationPlugin
 
 #### `IPluginSettingsProvider` (optional)
 
-Adds simple settings fields (Text / Password / Bool / Number / Button) to the standard Peak Settings window — no custom XAML. Each field is rendered as a labelled row, value bound to your plugin via `SetSettingValue`.
+Adds simple settings fields to the standard Peak Settings window — no custom XAML. Each field is rendered as a labelled row, value bound to your plugin via `SetSettingValue`. Field kinds:
+
+| Kind | Renders as | Notes |
+|---|---|---|
+| `Text` | TextBox | Plain string input. |
+| `Password` | TextBox with monospace font + obscured tag | For API keys / tokens. |
+| `Bool` | Toggle switch | `CurrentValue` is `"True"` / `"False"`. |
+| `Number` | TextBox (numeric content) | Plugin parses the string itself. |
+| `Button` | Clickable button | `SetSettingValue` is invoked with `null` on click. Used for "open folder", "reset", "trigger action". |
+| `Choice` | ComboBox | Populate `Options` with `PluginSettingChoice(value, label)` entries. The stored value is the matched option's `Value`; the user sees the `Label`. |
+| `FilePath` | TextBox + **Browse…** button | Opens `OpenFileDialog`. Set `FileFilter` to constrain (e.g. `"Executables|*.exe"`). |
+| `FolderPath` | TextBox + **Browse…** button | Opens folder picker. Stored value is a directory path. |
 
 ```csharp
 public class HelloPlugin : IWidgetPlugin, IPluginSettingsProvider
@@ -317,6 +328,7 @@ The interface your plugin holds onto from `AttachToIsland`. Full reference:
 | `SetExpansionBlocked(bool)` | Prevent / allow the user from expanding the island via hover/click. | While showing a full-pill overlay. |
 | `SetCollapsedOverlay(UIElement?)` | Stretch a custom element across the full collapsed pill, hiding the slot widgets. `null` removes the overlay. | Incoming call notification, "Press X to confirm" prompts. |
 | `SetExpandedHeaderContent(UIElement?)` | Drop a small UI fragment into the expanded header overlay between the Clock (slot 0) and Weather (slot 1) columns — spans both slots without resizing them. `null` clears it and restores the normal header layout. | Companion plugin uses this for its animated face. The host hides the overlay during state-transition animations and the Hidden state, so airspace controls (WebView2) don't paint stale content. |
+| `SetMediaActions(pluginId, actions)` | Register a set of icon buttons next to play/pause/skip in the MediaWidget. Each `MediaAction` carries an SVG `IconPathData`, a `Tooltip`, and an `OnClick` callback. Pass `null` to remove a plugin's actions. Buttons from multiple plugins concatenate in registration order. | A "download current track" button on a third-party media plugin; a "share now playing" button on a future social-media plugin. The `pluginId` namespaces the registration so plugins don't stomp each other. |
 
 ### 5. Settings persistence
 

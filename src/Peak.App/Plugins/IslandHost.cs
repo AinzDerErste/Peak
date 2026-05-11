@@ -122,6 +122,11 @@ public class IslandHost : IIslandHost
         UiDispatcher.Invoke(() => _window.SetExpandedHeaderContent(content));
     }
 
+    public void SetMediaActions(string pluginId, IReadOnlyList<MediaAction>? actions)
+    {
+        UiDispatcher.Invoke(() => _viewModel.SetPluginMediaActions(pluginId, actions));
+    }
+
     public void SetViewModelProperty(string propertyName, object? value)
     {
         UiDispatcher.Invoke(() =>

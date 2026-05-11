@@ -243,13 +243,34 @@ public class PluginLoader : IDisposable
                     string GetStr(string prop) => ft.GetProperty(prop)?.GetValue(f) as string ?? "";
                     string? GetStrN(string prop) => ft.GetProperty(prop)?.GetValue(f) as string;
                     int GetInt(string prop) => Convert.ToInt32(ft.GetProperty(prop)?.GetValue(f) ?? 0);
+
+                    // Choice options arrive as IReadOnlyList<PluginSettingChoice>
+                    // from the plugin's ALC; we project them into our own
+                    // PluginChoiceDto records so the host doesn't depend on
+                    // SDK types beyond their published shape.
+                    List<PluginChoiceDto>? options = null;
+                    var optsObj = ft.GetProperty("Options")?.GetValue(f) as System.Collections.IEnumerable;
+                    if (optsObj != null)
+                    {
+                        options = new List<PluginChoiceDto>();
+                        foreach (var opt in optsObj)
+                        {
+                            var ot = opt.GetType();
+                            var v = ot.GetProperty("Value")?.GetValue(opt) as string ?? "";
+                            var l = ot.GetProperty("Label")?.GetValue(opt) as string ?? v;
+                            options.Add(new PluginChoiceDto(v, l));
+                        }
+                    }
+
                     fields.Add(new PluginSettingFieldDto(
                         Key: GetStr("Key"),
                         Label: GetStr("Label"),
                         Description: GetStrN("Description"),
                         Kind: GetInt("Kind"),
                         CurrentValue: GetStrN("CurrentValue"),
-                        Placeholder: GetStrN("Placeholder")
+                        Placeholder: GetStrN("Placeholder"),
+                        Options: options,
+                        FileFilter: GetStrN("FileFilter")
                     ));
                 }
                 list.Add(new PluginSettingsInfo(plugin.Id, plugin.Name, fields));
@@ -384,10 +405,21 @@ public record PluginSettingFieldDto(
     string Key,
     string Label,
     string? Description,
-    int Kind,          // 0=Text, 1=Password, 2=Bool, 3=Number (mirrors PluginSettingFieldKind)
+    // 0=Text, 1=Password, 2=Bool, 3=Number, 4=Button,
+    // 5=Choice, 6=FilePath, 7=FolderPath
+    // (mirrors PluginSettingFieldKind in Peak.Plugin.Sdk)
+    int Kind,
     string? CurrentValue,
-    string? Placeholder
+    string? Placeholder,
+    // Options for Choice fields. Null for other kinds. Each item is a
+    // (Value, Label) pair — Value is what gets passed to SetSettingValue
+    // when the user picks it, Label is what shows in the dropdown.
+    IReadOnlyList<PluginChoiceDto>? Options = null,
+    // OpenFileDialog filter for FilePath fields, e.g. "Executable|*.exe".
+    string? FileFilter = null
 );
+
+public record PluginChoiceDto(string Value, string Label);
 
 public record LoadedPlugin(
     string Id,

@@ -35,7 +35,15 @@ public enum PluginSettingFieldKind
     /// <summary>Numeric input.</summary>
     Number,
     /// <summary>Action button — clicking invokes <see cref="IPluginSettingsProvider.SetSettingValue"/> with a null value.</summary>
-    Button
+    Button,
+    /// <summary>Dropdown — renders as a ComboBox populated from <see cref="PluginSettingField.Options"/>.
+    /// The <c>CurrentValue</c> must match one of the options' values.</summary>
+    Choice,
+    /// <summary>Path to a single file — renders as a TextBox + Browse button that opens an OpenFileDialog.
+    /// Use <see cref="PluginSettingField.FileFilter"/> to constrain the picker (e.g. "Executable|*.exe").</summary>
+    FilePath,
+    /// <summary>Path to a directory — renders as a TextBox + Browse button that opens a folder picker.</summary>
+    FolderPath
 }
 
 /// <summary>
@@ -62,4 +70,34 @@ public class PluginSettingField
 
     /// <summary>Optional placeholder text shown when the field is empty.</summary>
     public string? Placeholder { get; set; }
+
+    /// <summary>
+    /// Options for <see cref="PluginSettingFieldKind.Choice"/>. Each entry
+    /// is a (value, label) pair where the value is what gets passed to
+    /// <see cref="IPluginSettingsProvider.SetSettingValue"/> and the label
+    /// is what the user sees in the dropdown. Ignored for other kinds.
+    /// </summary>
+    public IReadOnlyList<PluginSettingChoice>? Options { get; set; }
+
+    /// <summary>
+    /// File filter for <see cref="PluginSettingFieldKind.FilePath"/>. WPF
+    /// OpenFileDialog format: <c>"Executable|*.exe"</c>. Pipe-separated
+    /// pairs of label and pattern; multiple filters separated by another
+    /// pipe. Ignored for other kinds.
+    /// </summary>
+    public string? FileFilter { get; set; }
+}
+
+/// <summary>
+/// One entry in a <see cref="PluginSettingFieldKind.Choice"/> dropdown.
+/// Kept as a tiny record-style class so plugins can construct lists in
+/// place: <c>new[] { new PluginSettingChoice("mp3", "MP3 (audio)"), ... }</c>.
+/// </summary>
+public class PluginSettingChoice
+{
+    public string Value { get; set; } = "";
+    public string Label { get; set; } = "";
+
+    public PluginSettingChoice() { }
+    public PluginSettingChoice(string value, string label) { Value = value; Label = label; }
 }

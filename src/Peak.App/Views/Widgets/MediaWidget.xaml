@@ -60,6 +60,31 @@
                         <Button Command="{Binding NextTrackCommand}" Style="{StaticResource IconButton}" Focusable="False">
                             <Path Data="{StaticResource IconForward}" Fill="White" Stretch="Uniform" Width="11" Height="11" />
                         </Button>
+                        <!-- Plugin-contributed action buttons. Each MediaAction
+                             becomes one IconButton next to the built-in
+                             play/pause/skip controls. The collection is
+                             populated by IIslandHost.SetMediaActions and
+                             rebuilt on each plugin re-registration. -->
+                        <ItemsControl ItemsSource="{Binding MediaActions}" Margin="6,0,0,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Click="OnMediaActionClick"
+                                            Style="{StaticResource IconButton}"
+                                            Margin="3,0,0,0"
+                                            Focusable="False"
+                                            ToolTip="{Binding Tooltip}"
+                                            Tag="{Binding}">
+                                        <Path Data="{Binding IconPathData}" Fill="White"
+                                              Stretch="Uniform" Width="11" Height="11" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </StackPanel>
             </Grid>

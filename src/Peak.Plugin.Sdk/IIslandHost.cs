@@ -73,6 +73,54 @@ public interface IIslandHost
     /// elements that need to scale should use Stretch / Viewbox internally.
     /// </summary>
     void SetExpandedHeaderContent(UIElement? content);
+
+    /// <summary>
+    /// Register a set of plugin-supplied action buttons for the expanded
+    /// MediaWidget — they appear next to play/pause/skip and let plugins
+    /// hook into "do something with the currently-playing track" without
+    /// having to render their own widget. Pass null (or an empty list)
+    /// to remove a plugin's previously-registered actions.
+    ///
+    /// <para>The host renders one icon-button per <see cref="MediaAction"/>
+    /// using the standard MediaWidget button style. Buttons from multiple
+    /// plugins are concatenated; ordering inside the row is by registration
+    /// order (first registered → leftmost extra button).</para>
+    ///
+    /// <para><paramref name="pluginId"/> namespaces the registration so a
+    /// plugin can update its own action set without affecting another
+    /// plugin's buttons. Pass your <see cref="IWidgetPlugin.Id"/>.</para>
+    /// </summary>
+    void SetMediaActions(string pluginId, IReadOnlyList<MediaAction>? actions);
+}
+
+/// <summary>
+/// A single plugin-contributed button shown next to the MediaWidget's
+/// play/pause/skip controls. Designed to be cheap to construct so plugins
+/// can re-register on every state change without worrying about churn.
+/// </summary>
+public class MediaAction
+{
+    /// <summary>Stable id within the registering plugin. Used by the host
+    /// for diff-against-previous when a plugin re-registers. Must be unique
+    /// across the actions a single plugin registers.</summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>Hover tooltip — keep it short ("Download", "Share", …).</summary>
+    public string Tooltip { get; set; } = "";
+
+    /// <summary>
+    /// SVG path data for the button glyph (the same string format you'd
+    /// drop into a WPF <c>Path.Data</c>). The host renders it inside the
+    /// 12×12 area used by the play/skip buttons. Default: a download glyph.
+    /// </summary>
+    public string IconPathData { get; set; } =
+        "M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"; // generic download arrow
+
+    /// <summary>
+    /// What runs on click. Always invoked on the UI thread. The action
+    /// should return quickly — kick off long work via Task.Run if needed.
+    /// </summary>
+    public Action OnClick { get; set; } = () => { };
 }
 
 /// <summary>
