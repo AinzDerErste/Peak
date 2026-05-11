@@ -181,6 +181,15 @@ public partial class IslandViewModel : ObservableObject
     // next to play/pause/skip. Mutated only via SetPluginMediaActions on
     // the UI thread.
     public ObservableCollection<Peak.Plugin.Sdk.MediaAction> MediaActions { get; } = new();
+
+    /// <summary>
+    /// Plugin-contributed banner content attached below the island.
+    /// IslandWindow's <c>IslandBannerHost</c> ContentControl binds to this
+    /// and stretches the content to the IslandBorder's current width.
+    /// Set via <see cref="IIslandHost.SetIslandBanner"/>; null hides the
+    /// banner. Single-slot — last writer wins.
+    /// </summary>
+    [ObservableProperty] private UIElement? _islandBanner;
     private readonly Dictionary<string, IReadOnlyList<Peak.Plugin.Sdk.MediaAction>> _pluginMediaActions = new();
 
     /// <summary>

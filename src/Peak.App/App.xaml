@@ -14,6 +14,7 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <converters:PlayPauseConverter x:Key="PlayPauseConverter" />
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
         <helpers:PathToIconConverter x:Key="PathToIconConverter" />
 
         <!-- Font Awesome SVG Icon Geometries -->

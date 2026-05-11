@@ -4,6 +4,19 @@ All notable changes to Peak are documented here.
 
 ---
 
+## [1.11.1] — 2026-05
+
+### Added — Plugin SDK
+
+- **`IIslandHost.SetIslandBanner(UIElement?)`** — plugins can attach a banner element below the island. Width tracks the IslandBorder's runtime `ActualWidth`, so the strip stretches/shrinks with state transitions automatically. Single-slot (last writer wins); pass `null` to clear. Use cases: download progress strips, "joining call…" status, background-task acknowledgements.
+- Wiring: `IslandHost.SetIslandBanner` → `IslandViewModel.IslandBanner` (an `[ObservableProperty] UIElement?`). The `IslandWindow.xaml` adds a new `IslandBannerHost` `ContentControl` below the IslandBorder inside a vertical StackPanel, bound to the VM property with width tied to the IslandBorder via element binding. Visibility flips via a new `NotNullToVisibilityConverter`.
+
+### Internal
+
+- IslandWindow root layout changed from a flat `Grid` to a `Grid` containing a vertical `StackPanel` for the (IslandBorder, BannerHost) pair plus the standalone `VisualizerCircle`. Doesn't affect any code-behind that touches `IslandBorder` directly — its layout slot still resolves through Width/Height animations the same way.
+
+---
+
 ## [1.11.0] — 2026-05
 
 ### Added — Plugin SDK extensions

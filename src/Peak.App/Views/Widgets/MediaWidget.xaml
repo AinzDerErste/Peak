@@ -64,7 +64,13 @@
                              becomes one IconButton next to the built-in
                              play/pause/skip controls. The collection is
                              populated by IIslandHost.SetMediaActions and
-                             rebuilt on each plugin re-registration. -->
+                             rebuilt on each plugin re-registration.
+
+                             Icon size: 12×12 — same as the Play/Pause glyph,
+                             1 px larger than Backward/Forward. Plugin icons
+                             often have lighter silhouettes (e.g. download
+                             arrow vs. play triangle); the extra pixel keeps
+                             them readable at the small button size. -->
                         <ItemsControl ItemsSource="{Binding MediaActions}" Margin="6,0,0,0">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -80,7 +86,7 @@
                                             ToolTip="{Binding Tooltip}"
                                             Tag="{Binding}">
                                         <Path Data="{Binding IconPathData}" Fill="White"
-                                              Stretch="Uniform" Width="11" Height="11" />
+                                              Stretch="Uniform" Width="12" Height="12" />
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

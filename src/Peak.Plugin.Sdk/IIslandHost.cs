@@ -75,6 +75,24 @@ public interface IIslandHost
     void SetExpandedHeaderContent(UIElement? content);
 
     /// <summary>
+    /// Attach a banner element below the island that tracks the island's
+    /// current width (collapsed pill width when collapsed, expanded width
+    /// when expanded, etc.). Use it for transient status strips — a
+    /// download progress bar, "joining call…", a flash message. Pass
+    /// <c>null</c> to clear the banner.
+    ///
+    /// <para><b>Single slot</b>: there's exactly one banner; if a second
+    /// plugin calls this while a banner is already showing, it overwrites
+    /// the previous one. Plugins that want to be polite should null their
+    /// banner out when they're done so the next caller gets a clean slot.</para>
+    ///
+    /// <para><b>Width binding</b>: the host stretches the banner to the
+    /// IslandBorder's <c>ActualWidth</c>, so the strip resizes naturally
+    /// as the island animates between Collapsed/Peek/Expanded states.</para>
+    /// </summary>
+    void SetIslandBanner(UIElement? content);
+
+    /// <summary>
     /// Register a set of plugin-supplied action buttons for the expanded
     /// MediaWidget — they appear next to play/pause/skip and let plugins
     /// hook into "do something with the currently-playing track" without

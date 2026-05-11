@@ -30,3 +30,17 @@ public class PlayPauseConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }
+
+/// <summary>
+/// Visible when the source is non-null, Collapsed when null. Used by the
+/// IslandBanner ContentControl in IslandWindow.xaml so the banner row
+/// vanishes from the layout when no plugin has set content.
+/// </summary>
+public class NotNullToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value != null ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}

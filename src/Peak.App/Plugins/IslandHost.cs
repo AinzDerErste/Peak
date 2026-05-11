@@ -127,6 +127,14 @@ public class IslandHost : IIslandHost
         UiDispatcher.Invoke(() => _viewModel.SetPluginMediaActions(pluginId, actions));
     }
 
+    public void SetIslandBanner(UIElement? content)
+    {
+        // Routed straight onto the VM — IslandWindow.xaml binds the banner
+        // ContentControl to IslandViewModel.IslandBanner, so the change
+        // flows through the normal data-binding machinery.
+        UiDispatcher.Invoke(() => _viewModel.IslandBanner = content);
+    }
+
     public void SetViewModelProperty(string propertyName, object? value)
     {
         UiDispatcher.Invoke(() =>

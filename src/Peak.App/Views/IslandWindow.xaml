@@ -129,6 +129,14 @@
     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True"
           TextOptions.TextFormattingMode="Display">
 
+        <!-- Island + banner stack. Putting IslandBorder and the optional
+             plugin banner in a vertical StackPanel lets the banner sit
+             naturally below the pill without manual Margin math. The
+             StackPanel auto-sizes to the IslandBorder's current layout
+             slot (which animates between Collapsed/Peek/Expanded
+             dimensions) so the banner tracks state changes. -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top">
+
         <!-- Main Island Border -->
         <Border x:Name="IslandBorder"
                 MinWidth="200" MinHeight="30"
@@ -543,6 +551,25 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- Plugin-supplied banner slot, attached to the bottom edge of the
+             island. Width tracks the IslandBorder's runtime ActualWidth so
+             the banner stretches/shrinks with state transitions. Visible
+             only when a plugin has set non-null content via
+             IIslandHost.SetIslandBanner. The plugin owns the entire visual
+             — Peak doesn't wrap it in a frame or apply any styling, so the
+             plugin can match the island's look or do its own thing.
+             Margin top=4 leaves a hair of space between pill and banner so
+             they read as related-but-separate elements rather than one
+             stretched pill. -->
+        <ContentControl x:Name="IslandBannerHost"
+                        Content="{Binding IslandBanner}"
+                        HorizontalAlignment="Center"
+                        Width="{Binding ActualWidth, ElementName=IslandBorder}"
+                        Margin="0,4,0,0"
+                        Visibility="{Binding IslandBanner, Converter={StaticResource NotNullToVisibility}}" />
+
+        </StackPanel>
 
         <!-- Separate visualizer circle (positioned right of pill via code-behind) -->
         <Border x:Name="VisualizerCircle"
